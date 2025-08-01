@@ -1,8 +1,10 @@
 {
-  "name": "code-exporter",
-  "displayName": "Code Exporter",
-  "description": "Export all code in the workspace to a single .txt file, with optional file extension filter.",
-  "version": "1.0.0",
+  "name": "code-to-txt-exporter-mg",
+  "displayName": "Code Dump to TXT/MD",
+  "description": "Export all code in a folder to a single .txt or .md file. Useful for archiving or AI-based code analysis.",
+  "publisher": "mghiani",
+  "license": "MIT",
+  "version": "1.0.1",
   "engines": {
     "vscode": "^1.102.0"
   },
@@ -20,11 +22,67 @@
         "command": "extension.exportCodeToText",
         "title": "Export Code to TXT"
       }
-    ]
+    ],
+    "menus": {
+      "explorer/context": [
+        {
+          "command": "extension.exportCodeToText",
+          "when": "explorerResourceIsFolder",
+          "group": "navigation"
+        }
+      ]
+    },
+    "configuration": {
+      "type": "object",
+      "title": "Code to TXT Exporter",
+      "properties": {
+        "codeToTxtExporter.defaultExtensions": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [".ts", ".js", ".py"],
+          "description": "Default list of file extensions to include in export."
+        },
+        "codeToTxtExporter.outputFormat": {
+          "type": "string",
+          "enum": [".txt", ".md"],
+          "default": ".md",
+          "description": "Default output file format."
+        },
+        "codeToTxtExporter.openAfterExport": {
+          "type": "boolean",
+          "default": true,
+          "description": "Open exported file after creation."
+        },
+        "codeToTxtExporter.copyToClipboard": {
+          "type": "boolean",
+          "default": false,
+          "description": "Copy exported content to clipboard."
+        }
+      }
+    }
   },
   "scripts": {
     "compile": "tsc -p ./"
   },
+  "keywords": [
+    "export",
+    "code",
+    "txt",
+    "md",
+    "ai",
+    "chatgpt",
+    "claude",
+    "archiving",
+    "markdown",
+    "tools",
+    "context",
+    "workspace",
+    "explorer",
+    "context menu",
+    "vscode-extension"
+  ],
   "devDependencies": {
     "@types/node": "^18.19.121",
     "@types/vscode": "^1.102.0",
