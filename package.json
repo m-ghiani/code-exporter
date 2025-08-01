@@ -6,6 +6,10 @@
   "engines": {
     "vscode": "^1.102.0"
   },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/m-ghiani/code-exporter.git"
+  },
   "activationEvents": [
     "onCommand:extension.exportCodeToText"
   ],
