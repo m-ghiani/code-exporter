@@ -1,0 +1,30 @@
+{
+  "name": "code-exporter",
+  "displayName": "Code Exporter",
+  "description": "Export all code in the workspace to a single .txt file, with optional file extension filter.",
+  "version": "1.0.0",
+  "engines": {
+    "vscode": "^1.102.0"
+  },
+  "activationEvents": [
+    "onCommand:extension.exportCodeToText"
+  ],
+  "main": "./dist/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "extension.exportCodeToText",
+        "title": "Export Code to TXT"
+      }
+    ]
+  },
+  "scripts": {
+    "compile": "tsc -p ./"
+  },
+  "devDependencies": {
+    "@types/node": "^18.19.121",
+    "@types/vscode": "^1.102.0",
+    "typescript": "^5.9.2",
+    "vsce": "^2.15.0"
+  }
+}
