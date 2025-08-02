@@ -213,6 +213,6 @@
     "vsce": "^2.15.0"
   },
   "dependencies": {
-    "ignore": "^5.3.0"
+    "ignore": "^5.3.2"
   }
 }
