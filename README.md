@@ -8,7 +8,7 @@
 <p align="center">
   <img src="https://img.shields.io/visual-studio-marketplace/v/mghiani.code-to-txt-exporter-mg?label=VSCode%20Marketplace" />
   <img src="https://img.shields.io/github/stars/m-ghiani/code-exporter?style=social" />
-  <img src="https://img.shields.io/github/license/m-ghiani/code-exporter" />
+  <img src="https://img.shields.io/github/license/m-ghiani/code-exporter?cacheSeconds=1" />
 </p>
 
 ---
