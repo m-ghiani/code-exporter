@@ -15,7 +15,7 @@
 
 ## ✨ Features
 
-### 🎯 Smart Exportß
+### 🎯 Smart Export
 
 - **Project Detection**: Automatically detects React, Vue, Angular, Python, Rust, Go, Flutter projects
 - **Smart Filtering**: Auto-excludes `node_modules`, `dist`, `build`, `.git`, and other common directories
