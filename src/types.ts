@@ -13,6 +13,7 @@ export interface ExportStatistics {
 }
 
 export type SkipEmptyOption = "include" | "exclude" | "ask";
+export type ShowPreviewOption = "always" | "never" | "ask";
 
 export interface SmartFilters {
   autoExclude: string[];
@@ -47,4 +48,92 @@ export interface ExportOptions {
   maxFileSize?: number;
   includeMetadata?: boolean;
   tokenEstimate?: boolean;
+}
+
+// Configuration interface
+export interface ExportConfig {
+  defaultExtensions: string[];
+  outputFormat: string;
+  openAfterExport: boolean;
+  copyToClipboard: boolean;
+  compactMode: boolean;
+  dryRun: boolean;
+  skipEmptyFiles: SkipEmptyOption;
+  useSmartFilters: boolean;
+  useCodedumpIgnore: boolean;
+  enablePresets: boolean;
+  includeMetadata: boolean;
+  showTokenEstimate: boolean;
+  smartFilters: SmartFilters;
+  maxChunkSize: number;
+  excludeSensitiveFiles: boolean;
+  sensitivePatterns: string[];
+  rememberLastChoice: boolean;
+  showPreview: ShowPreviewOption;
+}
+
+// Last user choices for "remember last choice" feature
+export interface LastExportChoices {
+  extensions?: string[];
+  template?: string;
+  outputFormat?: string;
+  skipEmpty?: boolean;
+}
+
+// Service interfaces for dependency injection
+export interface IFileSystemService {
+  getAllFiles(dir: string): string[];
+  readFile(filePath: string): string;
+  fileExists(filePath: string): boolean;
+  getFileStats(filePath: string): { size: number; mtime: Date };
+}
+
+export interface IConfigService {
+  load(): ExportConfig;
+  getSmartFilters(): SmartFilters;
+}
+
+export interface IFilterService {
+  loadGitignore(folderUri: string): void;
+  loadCodedumpIgnore(folderUri: string, enabled: boolean): void;
+  shouldIncludeFile(
+    filePath: string,
+    basePath: string,
+    extensions: string[],
+    useSmartFilters: boolean
+  ): boolean;
+}
+
+// Service container for dependency injection
+export interface IServiceContainer {
+  fileSystem: IFileSystemService;
+  config: IConfigService;
+  filter: IFilterService;
+}
+
+// JSON structured output format
+export interface JsonExportMetadata {
+  exportedAt: string;
+  sourceFolder: string;
+  totalFiles: number;
+  totalSize: number;
+  totalLines: number;
+  estimatedTokens: number;
+  extensions: string[];
+  version: string;
+}
+
+export interface JsonExportFile {
+  path: string;
+  extension: string;
+  content: string;
+  size: number;
+  lines: number;
+  tokens: number;
+  modified: string;
+}
+
+export interface JsonExportOutput {
+  metadata: JsonExportMetadata;
+  files: JsonExportFile[];
 }

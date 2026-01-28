@@ -29,6 +29,14 @@
         "title": "Code Dump: Export Current Workspace"
       }
     ],
+    "keybindings": [
+      {
+        "command": "extension.exportCodeToText",
+        "key": "ctrl+shift+e",
+        "mac": "cmd+shift+e",
+        "when": "explorerViewletFocus"
+      }
+    ],
     "menus": {
       "explorer/context": [
         {
@@ -63,10 +71,11 @@
           "type": "string",
           "enum": [
             ".txt",
-            ".md"
+            ".md",
+            ".json"
           ],
           "default": ".md",
-          "description": "Default output format for the exported file."
+          "description": "Default output format for the exported file (.txt, .md, or .json for structured output)."
         },
         "codeDump.openAfterExport": {
           "type": "boolean",
@@ -102,6 +111,11 @@
           "type": "boolean",
           "default": true,
           "description": "Enable smart filtering to automatically exclude common build/cache directories."
+        },
+        "codeDump.useCodedumpIgnore": {
+          "type": "boolean",
+          "default": true,
+          "description": "Use .codedumpignore file for project-specific export exclusions (similar to .gitignore syntax)."
         },
         "codeDump.enablePresets": {
           "type": "boolean",
@@ -176,6 +190,56 @@
           "type": "number",
           "default": 500000,
           "description": "Maximum size per output file chunk in bytes (500KB default)."
+        },
+        "codeDump.excludeSensitiveFiles": {
+          "type": "boolean",
+          "default": true,
+          "description": "Automatically exclude files that may contain sensitive data (.env, *.pem, credentials.*, etc.)."
+        },
+        "codeDump.sensitivePatterns": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [
+            ".env",
+            ".env.*",
+            "*.pem",
+            "*.key",
+            "*.p12",
+            "*.pfx",
+            "*.crt",
+            "*.cer",
+            "credentials.*",
+            "*secret*",
+            "*.secrets",
+            ".npmrc",
+            ".pypirc",
+            "*.keystore",
+            "id_rsa*",
+            "id_dsa*",
+            "id_ecdsa*",
+            "id_ed25519*",
+            "*.gpg",
+            "serviceAccountKey.json",
+            "firebase-adminsdk*.json"
+          ],
+          "description": "File patterns to exclude as sensitive (supports wildcards)."
+        },
+        "codeDump.rememberLastChoice": {
+          "type": "boolean",
+          "default": true,
+          "description": "Remember last export selections (extensions, template, format) and use them as defaults."
+        },
+        "codeDump.showPreview": {
+          "type": "string",
+          "enum": [
+            "always",
+            "never",
+            "ask"
+          ],
+          "default": "ask",
+          "description": "Show a preview of files before export: 'always', 'never', or 'ask'."
         }
       }
     }
