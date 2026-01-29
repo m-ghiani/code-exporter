@@ -5,6 +5,29 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.4.1] - 2026-01-29
+
+### Fixed
+
+- Remove accidentally included PAT file from package and add `.vscodeignore` to prevent future leaks.
+
+## [1.4.0] - 2026-01-29
+
+### Added
+
+- AI Context Optimizer integration for exports (comment removal, whitespace minification, truncation, max token budget).
+- File prioritization pipeline (entry points, shallow paths, optional recent-file bias) to maximize context value.
+- JSON metadata dependency map `metadata.dependencies` plus structured `dependencyGraph`.
+- Export optimization utility module to centralize prioritization/optimization/budget logic.
+- Unit tests for Context Optimizer, Dependency Analyzer, and export optimization helpers.
+- `npm test` script (runs compile + node:test on compiled tests).
+
+### Changed
+
+- JSON exports now optionally include optimization stats when the optimizer is enabled.
+- Export pipeline respects token budget by skipping files when over limit and uses optimized content in counts.
+- Config loading now includes AI context optimizer defaults and dependency graph flag.
+
 ## [1.0.0] - 2025-08-01
 
 ### Added

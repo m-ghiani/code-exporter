@@ -1,5 +1,5 @@
 import * as vscode from "vscode";
-import { ExportConfig, IConfigService, SmartFilters } from "./types";
+import { AiContextOptimizerConfig, ExportConfig, IConfigService, SmartFilters } from "./types";
 
 const DEFAULT_SMART_FILTERS: SmartFilters = {
   autoExclude: ["node_modules", "dist", "build", ".git", "coverage", ".vscode", ".idea"],
@@ -33,6 +33,16 @@ const DEFAULT_SENSITIVE_PATTERNS: string[] = [
   "firebase-adminsdk*.json"
 ];
 
+const DEFAULT_AI_CONTEXT_OPTIMIZER: AiContextOptimizerConfig = {
+  enabled: false,
+  maxTokenBudget: 100000,
+  removeComments: true,
+  minifyWhitespace: true,
+  truncateLargeFiles: true,
+  maxLinesPerFile: 500,
+  prioritizeRecentFiles: true
+};
+
 export class ConfigService implements IConfigService {
   private config: vscode.WorkspaceConfiguration;
 
@@ -59,7 +69,12 @@ export class ConfigService implements IConfigService {
       excludeSensitiveFiles: this.config.get<boolean>("excludeSensitiveFiles", true),
       sensitivePatterns: this.config.get<string[]>("sensitivePatterns", DEFAULT_SENSITIVE_PATTERNS),
       rememberLastChoice: this.config.get<boolean>("rememberLastChoice", true),
-      showPreview: this.config.get<"always" | "never" | "ask">("showPreview", "ask")
+      showPreview: this.config.get<"always" | "never" | "ask">("showPreview", "ask"),
+      aiContextOptimizer: this.config.get<AiContextOptimizerConfig>(
+        "aiContextOptimizer",
+        DEFAULT_AI_CONTEXT_OPTIMIZER
+      ),
+      includeDependencyGraph: this.config.get<boolean>("includeDependencyGraph", true)
     };
   }
 

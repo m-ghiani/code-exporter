@@ -23,6 +23,17 @@ export interface SmartFilters {
   excludePatterns: string[];
 }
 
+// AI Context Optimizer settings
+export interface AiContextOptimizerConfig {
+  enabled: boolean;
+  maxTokenBudget: number;
+  removeComments: boolean;
+  minifyWhitespace: boolean;
+  truncateLargeFiles: boolean;
+  maxLinesPerFile: number;
+  prioritizeRecentFiles: boolean;
+}
+
 export interface ExportTemplate {
   name: string;
   pattern: string;
@@ -70,6 +81,8 @@ export interface ExportConfig {
   sensitivePatterns: string[];
   rememberLastChoice: boolean;
   showPreview: ShowPreviewOption;
+  aiContextOptimizer: AiContextOptimizerConfig;
+  includeDependencyGraph: boolean;
 }
 
 // Last user choices for "remember last choice" feature
@@ -121,6 +134,7 @@ export interface JsonExportMetadata {
   estimatedTokens: number;
   extensions: string[];
   version: string;
+  dependencies?: Record<string, string[]>;
 }
 
 export interface JsonExportFile {
@@ -136,4 +150,28 @@ export interface JsonExportFile {
 export interface JsonExportOutput {
   metadata: JsonExportMetadata;
   files: JsonExportFile[];
+  dependencyGraph?: DependencyGraph;
+  optimizationStats?: OptimizationStats;
+}
+
+// Dependency graph for understanding file relationships
+export interface DependencyGraph {
+  nodes: string[];
+  edges: DependencyEdge[];
+}
+
+export interface DependencyEdge {
+  from: string;
+  to: string;
+  type: "import" | "require" | "dynamic";
+}
+
+// Stats about AI context optimization
+export interface OptimizationStats {
+  originalTokens: number;
+  optimizedTokens: number;
+  tokensSaved: number;
+  savingsPercent: number;
+  truncatedFiles: string[];
+  commentsRemoved: number;
 }

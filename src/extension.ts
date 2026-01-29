@@ -3,6 +3,12 @@ import * as path from "path";
 import * as fs from "fs";
 import { ServiceContainerFactory } from "./serviceContainer";
 import { JsonExportOutput, JsonExportFile } from "./types";
+import { DependencyAnalyzer } from "./dependencyAnalyzer";
+import {
+  buildOptimizationPipeline,
+  optimizeContent,
+  wouldExceedBudget
+} from "./exportOptimization";
 
 export function activate(context: vscode.ExtensionContext) {
   const services = ServiceContainerFactory.create();
@@ -343,6 +349,14 @@ async function processFiles(
     return;
   }
 
+  const optimization = buildOptimizationPipeline(
+    config.aiContextOptimizer,
+    filteredFiles,
+    folderUri,
+    (filePath) => services.fileSystem.getFileStats(filePath)
+  );
+  let totalOptimizedTokens = 0;
+
   const managers = ServiceContainerFactory.createExportManagers(
     outputPath,
     outputFormat,
@@ -352,43 +366,65 @@ async function processFiles(
   await vscode.window.withProgress(
     { location: vscode.ProgressLocation.Notification, title: "Exporting code...", cancellable: false },
     async (progress) => {
-      for (let i = 0; i < filteredFiles.length; i++) {
-        const file = filteredFiles[i];
+      for (let i = 0; i < optimization.orderedFiles.length; i++) {
+        const file = optimization.orderedFiles[i];
         managers.logger.incrementTotal();
 
         try {
           let content = services.fileSystem.readFile(file);
           if (config.compactMode) content = content.replace(/\s+/g, " ");
-          if (skipEmpty && content.trim().length === 0) {
+          const relativePath = path.relative(folderUri, file);
+          const extension = path.extname(file).replace(".", "");
+          const optimizedResult = optimizeContent(content, file, extension, optimization.optimizer);
+          const optimizedContent = optimizedResult.optimizedContent;
+
+          if (skipEmpty && optimizedContent.trim().length === 0) {
             managers.logger.recordSkipped(file, "empty");
             continue;
           }
 
-          const relativePath = path.relative(folderUri, file);
-          const lines = content.split("\n").length;
-          const tokens = Math.ceil(content.length / 4);
-          const extension = path.extname(file).replace(".", "");
+          if (optimization.useOptimizer && wouldExceedBudget(
+            totalOptimizedTokens,
+            optimizedResult.optimizedTokens,
+            optimization.maxTokenBudget
+          )) {
+            managers.logger.recordSkipped(file, "budget");
+            continue;
+          }
+
+          totalOptimizedTokens += optimizedResult.optimizedTokens;
+          const lines = optimizedContent.split("\n").length;
 
           const formatted = services.template.formatContent(
             selectedTemplate,
             relativePath,
-            content,
+            optimizedContent,
             file,
             outputFormat
           );
 
           managers.chunk.addContent(formatted);
-          managers.logger.recordProcessed(content.length, lines, tokens, extension);
+          managers.logger.recordProcessed(
+            optimizedContent.length,
+            lines,
+            optimizedResult.optimizedTokens,
+            extension
+          );
 
           // Update status bar
           const stats = managers.logger.getStats();
-          services.statusBar.setExporting(i + 1, filteredFiles.length, stats.estimatedTokens, stats.totalSize);
+          services.statusBar.setExporting(
+            i + 1,
+            optimization.orderedFiles.length,
+            stats.estimatedTokens,
+            stats.totalSize
+          );
         } catch (err) {
           managers.logger.recordError(file, err as Error);
         }
 
         progress.report({
-          increment: ((i + 1) / filteredFiles.length) * 100,
+          increment: ((i + 1) / optimization.orderedFiles.length) * 100,
           message: `Processing: ${path.basename(file)}`
         });
       }
@@ -440,58 +476,90 @@ async function processFilesAsJson(
 ): Promise<void> {
   const { folderUri, filteredFiles, skipEmpty, outputPath } = options;
 
+  const optimization = buildOptimizationPipeline(
+    config.aiContextOptimizer,
+    filteredFiles,
+    folderUri,
+    (filePath) => services.fileSystem.getFileStats(filePath)
+  );
+
   const jsonFiles: JsonExportFile[] = [];
   let totalSize = 0;
   let totalLines = 0;
   let totalTokens = 0;
+  let totalOriginalTokens = 0;
   const extensions = new Set<string>();
   let processedCount = 0;
   let skippedCount = 0;
+  const dependencyAnalyzer = config.includeDependencyGraph
+    ? new DependencyAnalyzer(folderUri)
+    : null;
 
   await vscode.window.withProgress(
     { location: vscode.ProgressLocation.Notification, title: "Exporting to JSON...", cancellable: false },
     async (progress) => {
-      for (let i = 0; i < filteredFiles.length; i++) {
-        const file = filteredFiles[i];
+      for (let i = 0; i < optimization.orderedFiles.length; i++) {
+        const file = optimization.orderedFiles[i];
 
         try {
           let content = services.fileSystem.readFile(file);
           if (config.compactMode) content = content.replace(/\s+/g, " ");
-          if (skipEmpty && content.trim().length === 0) {
+          const stats = services.fileSystem.getFileStats(file);
+          const relativePath = path.relative(folderUri, file);
+          const ext = path.extname(file).replace(".", "");
+          const optimizedResult = optimizeContent(content, file, ext, optimization.optimizer);
+          const optimizedContent = optimizedResult.optimizedContent;
+
+          if (skipEmpty && optimizedContent.trim().length === 0) {
             skippedCount++;
             continue;
           }
 
-          const stats = services.fileSystem.getFileStats(file);
-          const relativePath = path.relative(folderUri, file);
-          const lines = content.split("\n").length;
-          const tokens = Math.ceil(content.length / 4);
-          const ext = path.extname(file).replace(".", "");
+          if (optimization.useOptimizer && wouldExceedBudget(
+            totalTokens,
+            optimizedResult.optimizedTokens,
+            optimization.maxTokenBudget
+          )) {
+            skippedCount++;
+            continue;
+          }
+
+          const lines = optimizedContent.split("\n").length;
 
           extensions.add(ext);
-          totalSize += content.length;
+          totalSize += optimizedContent.length;
           totalLines += lines;
-          totalTokens += tokens;
+          totalTokens += optimizedResult.optimizedTokens;
+          totalOriginalTokens += optimizedResult.originalTokens;
           processedCount++;
+
+          if (dependencyAnalyzer) {
+            dependencyAnalyzer.addFile(relativePath, optimizedContent);
+          }
 
           jsonFiles.push({
             path: relativePath,
             extension: ext,
-            content,
-            size: content.length,
+            content: optimizedContent,
+            size: optimizedContent.length,
             lines,
-            tokens,
+            tokens: optimizedResult.optimizedTokens,
             modified: stats.mtime.toISOString()
           });
 
           // Update status bar
-          services.statusBar.setExporting(i + 1, filteredFiles.length, totalTokens, totalSize);
+          services.statusBar.setExporting(
+            i + 1,
+            optimization.orderedFiles.length,
+            totalTokens,
+            totalSize
+          );
         } catch (err) {
           console.warn(`Failed to process ${file}:`, err);
         }
 
         progress.report({
-          increment: ((i + 1) / filteredFiles.length) * 100,
+          increment: ((i + 1) / optimization.orderedFiles.length) * 100,
           message: `Processing: ${path.basename(file)}`
         });
       }
@@ -510,6 +578,36 @@ async function processFilesAsJson(
         },
         files: jsonFiles
       };
+
+      if (dependencyAnalyzer) {
+        const graph = dependencyAnalyzer.analyze();
+        const dependencies: Record<string, string[]> = {};
+
+        for (const node of graph.nodes) {
+          dependencies[node] = [];
+        }
+
+        for (const edge of graph.edges) {
+          if (!dependencies[edge.from]) dependencies[edge.from] = [];
+          if (!dependencies[edge.from].includes(edge.to)) {
+            dependencies[edge.from].push(edge.to);
+          }
+        }
+
+        for (const node of Object.keys(dependencies)) {
+          dependencies[node].sort();
+        }
+
+        jsonOutput.metadata.dependencies = dependencies;
+        jsonOutput.dependencyGraph = graph;
+      }
+
+      if (optimization.useOptimizer && optimization.optimizer) {
+        jsonOutput.optimizationStats = optimization.optimizer.getStats(
+          totalOriginalTokens,
+          totalTokens
+        );
+      }
 
       // Write JSON file
       fs.writeFileSync(outputPath, JSON.stringify(jsonOutput, null, 2), "utf8");

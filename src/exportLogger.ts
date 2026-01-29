@@ -30,7 +30,10 @@ export class ExportLogger {
     this.stats.fileTypes[ext] = (this.stats.fileTypes[ext] || 0) + 1;
   }
 
-  recordSkipped(file: string, reason: 'empty' | 'error' | 'gitignore' | 'size' | 'binary'): void {
+  recordSkipped(
+    file: string,
+    reason: "empty" | "error" | "gitignore" | "size" | "binary" | "budget"
+  ): void {
     this.stats.skippedFiles++;
     if (reason === 'empty') this.stats.emptyFiles++;
     if (reason === 'error') this.stats.errorFiles++;

@@ -1,0 +1,7 @@
+node_modules/**
+src/__tests__/**
+.git/**
+.vscode/**
+.DS_Store
+*.vsix
+token.txt

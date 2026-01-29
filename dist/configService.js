@@ -65,6 +65,15 @@ const DEFAULT_SENSITIVE_PATTERNS = [
     "serviceAccountKey.json",
     "firebase-adminsdk*.json"
 ];
+const DEFAULT_AI_CONTEXT_OPTIMIZER = {
+    enabled: false,
+    maxTokenBudget: 100000,
+    removeComments: true,
+    minifyWhitespace: true,
+    truncateLargeFiles: true,
+    maxLinesPerFile: 500,
+    prioritizeRecentFiles: true
+};
 class ConfigService {
     config;
     constructor() {
@@ -89,7 +98,9 @@ class ConfigService {
             excludeSensitiveFiles: this.config.get("excludeSensitiveFiles", true),
             sensitivePatterns: this.config.get("sensitivePatterns", DEFAULT_SENSITIVE_PATTERNS),
             rememberLastChoice: this.config.get("rememberLastChoice", true),
-            showPreview: this.config.get("showPreview", "ask")
+            showPreview: this.config.get("showPreview", "ask"),
+            aiContextOptimizer: this.config.get("aiContextOptimizer", DEFAULT_AI_CONTEXT_OPTIMIZER),
+            includeDependencyGraph: this.config.get("includeDependencyGraph", true)
         };
     }
     getSmartFilters() {
