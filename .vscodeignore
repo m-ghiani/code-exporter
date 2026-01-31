@@ -1,4 +1,13 @@
 node_modules/**
+!node_modules/ignore/**
+!node_modules/ignore/package.json
+!node_modules/pdf-lib/**
+!node_modules/pdf-lib/package.json
+!node_modules/tslib/**
+!node_modules/tslib/package.json
+!node_modules/@pdf-lib/**
+!node_modules/pako/**
+!node_modules/pako/package.json
 src/__tests__/**
 .git/**
 .vscode/**

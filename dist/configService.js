@@ -69,10 +69,27 @@ const DEFAULT_AI_CONTEXT_OPTIMIZER = {
     enabled: false,
     maxTokenBudget: 100000,
     removeComments: true,
+    removeDocstrings: true,
     minifyWhitespace: true,
     truncateLargeFiles: true,
     maxLinesPerFile: 500,
     prioritizeRecentFiles: true
+};
+const DEFAULT_PRIVACY_MODE = {
+    enabled: false,
+    maskEmails: true,
+    maskTokens: true,
+    maskApiKeys: true,
+    placeholder: "[REDACTED]",
+    customPatterns: []
+};
+const DEFAULT_NOTEBOOKLM_ENTERPRISE = {
+    enabled: false,
+    projectNumber: "",
+    location: "global",
+    endpointLocation: "us-",
+    notebookId: "",
+    accessToken: ""
 };
 class ConfigService {
     config;
@@ -85,6 +102,8 @@ class ConfigService {
             outputFormat: this.config.get("outputFormat", ".md"),
             openAfterExport: this.config.get("openAfterExport", true),
             copyToClipboard: this.config.get("copyToClipboard", false),
+            showNotifications: this.config.get("showNotifications", false),
+            logVerbose: this.config.get("logVerbose", false),
             compactMode: this.config.get("compactMode", false),
             dryRun: this.config.get("dryRun", false),
             skipEmptyFiles: this.config.get("skipEmptyFiles", "ask"),
@@ -100,7 +119,10 @@ class ConfigService {
             rememberLastChoice: this.config.get("rememberLastChoice", true),
             showPreview: this.config.get("showPreview", "ask"),
             aiContextOptimizer: this.config.get("aiContextOptimizer", DEFAULT_AI_CONTEXT_OPTIMIZER),
-            includeDependencyGraph: this.config.get("includeDependencyGraph", true)
+            includeDependencyGraph: this.config.get("includeDependencyGraph", true),
+            privacyMode: this.config.get("privacyMode", DEFAULT_PRIVACY_MODE),
+            userProfiles: this.config.get("userProfiles", []),
+            notebooklmEnterprise: this.config.get("notebooklmEnterprise", DEFAULT_NOTEBOOKLM_ENTERPRISE)
         };
     }
     getSmartFilters() {

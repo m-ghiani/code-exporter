@@ -80,6 +80,14 @@ export class TemplateManager {
     return Array.from(this.templates.keys());
   }
 
+  getTemplateOptions(): Array<{ key: string; name: string; withMetadata: boolean }> {
+    return Array.from(this.templates.entries()).map(([key, template]) => ({
+      key,
+      name: template.name,
+      withMetadata: template.withMetadata
+    }));
+  }
+
   addCustomTemplate(key: string, template: ExportTemplate): void {
     this.templates.set(key, template);
   }

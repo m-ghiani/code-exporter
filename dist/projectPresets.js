@@ -34,7 +34,7 @@ var __importStar = (this && this.__importStar) || (function () {
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.ProjectPresetManager = void 0;
-const fs = __importStar(require("fs"));
+const fs = __importStar(require("fs/promises"));
 const path = __importStar(require("path"));
 class ProjectPresetManager {
     presets = new Map();
@@ -91,13 +91,13 @@ class ProjectPresetManager {
             template: "default-md"
         });
     }
-    detectProjectType(folderPath) {
+    async detectProjectType(folderPath) {
         try {
-            const files = fs.readdirSync(folderPath);
+            const files = await fs.readdir(folderPath);
             // React/Next.js detection
             if (files.includes("package.json")) {
                 const packagePath = path.join(folderPath, "package.json");
-                const packageContent = JSON.parse(fs.readFileSync(packagePath, "utf8"));
+                const packageContent = JSON.parse(await fs.readFile(packagePath, "utf8"));
                 const deps = { ...packageContent.dependencies, ...packageContent.devDependencies };
                 if (deps.react)
                     return "react";

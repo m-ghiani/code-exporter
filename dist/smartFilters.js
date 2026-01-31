@@ -34,16 +34,22 @@ var __importStar = (this && this.__importStar) || (function () {
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.SmartFilterManager = void 0;
-const fs = __importStar(require("fs"));
+const fs = __importStar(require("fs/promises"));
 const path = __importStar(require("path"));
 class SmartFilterManager {
     filters;
     constructor(filters) {
         this.filters = filters;
     }
-    shouldExcludeFile(filePath, basePath) {
+    async shouldExcludeFile(filePath, basePath) {
         const relativePath = path.relative(basePath, filePath);
-        const stats = fs.statSync(filePath);
+        let stats;
+        try {
+            stats = await fs.stat(filePath);
+        }
+        catch {
+            return true;
+        }
         // Check auto-exclude patterns
         for (const pattern of this.filters.autoExclude) {
             if (relativePath.includes(pattern))
@@ -67,10 +73,42 @@ class SmartFilterManager {
                 return true;
         }
         // Check if binary (basic check)
-        if (this.filters.skipBinaryFiles && this.isBinaryFile(filePath)) {
+        if (this.filters.skipBinaryFiles && await this.isBinaryFile(filePath)) {
             return true;
         }
         return false;
+    }
+    async getExcludeReason(filePath, basePath) {
+        const relativePath = path.relative(basePath, filePath);
+        let stats;
+        try {
+            stats = await fs.stat(filePath);
+        }
+        catch {
+            return "stat-error";
+        }
+        for (const pattern of this.filters.autoExclude) {
+            if (relativePath.includes(pattern))
+                return "auto-exclude";
+        }
+        for (const pattern of this.filters.excludePatterns) {
+            if (this.matchesPattern(relativePath, pattern))
+                return "exclude-pattern";
+        }
+        if (this.filters.includePatterns.length > 0) {
+            const matches = this.filters.includePatterns.some(pattern => this.matchesPattern(relativePath, pattern));
+            if (!matches)
+                return "include-pattern-miss";
+        }
+        if (this.filters.maxFileSize) {
+            const maxBytes = this.parseFileSize(this.filters.maxFileSize);
+            if (stats.size > maxBytes)
+                return "max-file-size";
+        }
+        if (this.filters.skipBinaryFiles && await this.isBinaryFile(filePath)) {
+            return "binary";
+        }
+        return null;
     }
     matchesPattern(filePath, pattern) {
         const regex = new RegExp(pattern.replace(/\*/g, '.*').replace(/\?/g, '.'));
@@ -89,11 +127,11 @@ class SmartFilterManager {
             default: return size;
         }
     }
-    isBinaryFile(filePath) {
+    async isBinaryFile(filePath) {
         try {
-            const buffer = fs.readFileSync(filePath, { encoding: null });
+            const buffer = await fs.readFile(filePath);
             const sample = buffer.slice(0, Math.min(512, buffer.length));
-            return sample.some(byte => byte === 0);
+            return sample.some((byte) => byte === 0);
         }
         catch {
             return false;

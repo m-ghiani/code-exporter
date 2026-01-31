@@ -95,6 +95,13 @@ class TemplateManager {
     getTemplateNames() {
         return Array.from(this.templates.keys());
     }
+    getTemplateOptions() {
+        return Array.from(this.templates.entries()).map(([key, template]) => ({
+            key,
+            name: template.name,
+            withMetadata: template.withMetadata
+        }));
+    }
     addCustomTemplate(key, template) {
         this.templates.set(key, template);
     }

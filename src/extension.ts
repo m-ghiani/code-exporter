@@ -1,14 +1,13 @@
 import * as vscode from "vscode";
 import * as path from "path";
-import * as fs from "fs";
 import { ServiceContainerFactory } from "./serviceContainer";
-import { JsonExportOutput, JsonExportFile } from "./types";
-import { DependencyAnalyzer } from "./dependencyAnalyzer";
+import { ExportPreset } from "./types";
+import { showExportWebview } from "./webview";
 import {
-  buildOptimizationPipeline,
-  optimizeContent,
-  wouldExceedBudget
-} from "./exportOptimization";
+  buildFileSelectionSummary,
+  isNotebooklmUploadAvailable,
+  processFiles
+} from "./exportWorkflow";
 
 export function activate(context: vscode.ExtensionContext) {
   const services = ServiceContainerFactory.create();
@@ -19,52 +18,165 @@ export function activate(context: vscode.ExtensionContext) {
     "extension.exportCodeToText",
     async (uri?: vscode.Uri) => {
       const folderUri = uri?.fsPath || vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
-      if (!folderUri) {
-        vscode.window.showErrorMessage("No folder selected.");
-        return;
-      }
-
       // Refresh config on each export to pick up any changes
       ServiceContainerFactory.refreshConfig();
       const config = services.config.load();
 
-      // Get user selections
-      const userSelections = await getUserSelections(services, config, folderUri);
-      if (!userSelections) return;
+      if (!folderUri) {
+        if (config.showNotifications) {
+          vscode.window.showErrorMessage("No folder selected.");
+        }
+        return;
+      }
 
-      const { selectedExtensions, selectedTemplate, skipEmpty, outputFormat, outputPath } = userSelections;
+      // Get user selections
+      const rawFiles = await services.fileSystem.getAllFiles(folderUri);
+      const allExtensions = Array.from(
+        new Set(rawFiles.map((f) => path.extname(f)).filter((e) => e))
+      ).sort();
+
+      const lastChoices = config.rememberLastChoice ? services.state.getLastChoices() : undefined;
+      let presetExtensions: string[] | null = null;
+      let presetTemplate: string | null = null;
+      if (config.enablePresets) {
+        const detectedType = await services.preset.detectProjectType(folderUri);
+        if (detectedType) {
+          const preset = services.preset.getPreset(detectedType);
+          if (preset) {
+            presetExtensions = preset.extensions;
+            presetTemplate = preset.template;
+          }
+        }
+      }
+      const defaultFormat = lastChoices?.outputFormat || config.outputFormat;
+      const defaultTemplate = lastChoices?.template
+        || presetTemplate
+        || (defaultFormat === ".txt" ? "default-txt" : "default-md");
+      const defaultFileName = `${path.basename(folderUri)}-code${defaultFormat}`;
+      const defaultOutputPath = lastChoices?.outputPath || path.join(folderUri, defaultFileName);
+
+      const profiles = config.userProfiles || [];
+      const selectedProfileId = lastChoices?.profileId
+        && profiles.some((profile) => profile.id === lastChoices.profileId)
+        ? lastChoices.profileId
+        : "default";
+      const notebooklmAvailable = isNotebooklmUploadAvailable(config);
+
+      const session = await showExportWebview(context, {
+        extensions: allExtensions,
+        templates: services.template.getTemplateOptions(),
+        preselectedExtensions: lastChoices?.extensions?.length
+          ? lastChoices.extensions
+          : (presetExtensions && presetExtensions.length > 0 ? presetExtensions : config.defaultExtensions),
+        selectedTemplate: defaultTemplate,
+        exportPreset: lastChoices?.preset || "standard",
+        profiles,
+        selectedProfileId,
+        privacyModeEnabled: config.privacyMode.enabled,
+        openAfterExport: lastChoices?.openAfterExport ?? config.openAfterExport,
+        notebooklmUploadAvailable: notebooklmAvailable,
+        notebooklmUploadEnabled: lastChoices?.notebooklmUpload ?? false,
+        skipEmpty: lastChoices?.skipEmpty ?? (config.skipEmptyFiles === "exclude"),
+        outputFormat: defaultFormat,
+        defaultFileName,
+        defaultOutputPath,
+        showPreview: config.showPreview !== "never",
+        dryRun: config.dryRun
+      });
+      if (!session) return;
+      const userSelections = session.selections;
+      const log = session.appendLog;
+      log("Selections received.");
+
+      const {
+        selectedExtensions,
+        skipEmpty,
+        outputPath,
+        showPreview,
+        exportPreset,
+        privacyModeEnabled,
+        selectedProfileId: profileId,
+        openAfterExport,
+        notebooklmUploadEnabled
+      } = userSelections;
+      let { outputFormat } = userSelections;
+      let { selectedTemplate } = userSelections;
+      if (outputFormat === ".txt" && selectedTemplate === "default-md") selectedTemplate = "default-txt";
+      if (outputFormat === ".md" && selectedTemplate === "default-txt") selectedTemplate = "default-md";
+      if (outputFormat === ".pdf" && selectedTemplate === "default-txt") selectedTemplate = "default-md";
+      if (exportPreset === "ai-pack") {
+        selectedTemplate = "ai-ready";
+        outputFormat = ".json";
+      }
+
+      if (config.rememberLastChoice) {
+        await services.state.saveLastChoices({
+          extensions: selectedExtensions,
+          template: selectedTemplate,
+          outputFormat,
+          skipEmpty,
+          preset: exportPreset,
+          profileId,
+          outputPath,
+          openAfterExport,
+          notebooklmUpload: notebooklmUploadEnabled
+        });
+      }
 
       // Load ignore files
-      services.filter.loadGitignore(folderUri);
-      services.filter.loadCodedumpIgnore(folderUri, config.useCodedumpIgnore);
+      await Promise.all([
+        services.filter.loadGitignore(folderUri),
+        services.filter.loadCodedumpIgnore(folderUri, config.useCodedumpIgnore)
+      ]);
 
       // Show status bar and start scanning
       services.statusBar.show();
       services.statusBar.setScanning();
 
       // Get and filter files
-      const rawFiles = services.fileSystem.getAllFiles(folderUri);
-      const filteredFiles = rawFiles.filter((file) =>
-        services.filter.shouldIncludeFile(file, folderUri, selectedExtensions, config.useSmartFilters)
+      const { filteredFiles, excludedFiles } = await buildFileSelectionSummary(
+        services,
+        rawFiles,
+        folderUri,
+        selectedExtensions,
+        config.useSmartFilters,
+        exportPreset
       );
+      log(`Files matched: ${filteredFiles.length} (excluded: ${excludedFiles.length}).`);
 
       // Update status bar with file count
       services.statusBar.setIdle(filteredFiles.length);
 
+      if (filteredFiles.length === 0) {
+        services.statusBar.hide();
+        log("No files matched the current filters.");
+        if (config.showNotifications) {
+          vscode.window.showWarningMessage(
+            "No files matched the current filters. Check extensions, .gitignore/.codedumpignore, smart filters, or sensitive-file exclusions."
+          );
+        }
+        return;
+      }
+
       if (config.dryRun) {
-        vscode.window.showInformationMessage(
-          `Dry run enabled: ${filteredFiles.length} files would be processed.`
-        );
+        log(`Dry run enabled: ${filteredFiles.length} files would be processed.`);
+        if (config.showNotifications) {
+          vscode.window.showInformationMessage(
+            `Dry run enabled: ${filteredFiles.length} files would be processed.`
+          );
+        }
         services.statusBar.hide();
         return;
       }
 
       // Show preview if enabled
       let finalFiles = filteredFiles;
-      if (config.showPreview !== "never") {
-        const previewResult = await showPreview(services, config, folderUri, filteredFiles);
+      if (showPreview) {
+        log("Showing file preview...");
+        const previewResult = await showFilePreview(services, folderUri, filteredFiles);
         if (previewResult === null) {
           services.statusBar.hide();
+          log("Export cancelled from preview.");
           return; // User cancelled
         }
         finalFiles = previewResult;
@@ -77,7 +189,13 @@ export function activate(context: vscode.ExtensionContext) {
         selectedTemplate,
         skipEmpty,
         outputFormat,
-        outputPath
+        outputPath,
+        exportPreset,
+        excludedFiles,
+        privacyModeEnabled,
+        openAfterExport,
+        notebooklmUploadEnabled,
+        log
       });
     }
   );
@@ -87,10 +205,12 @@ export function activate(context: vscode.ExtensionContext) {
   // CLI command
   const cliDisposable = vscode.commands.registerCommand("extension.exportCodeCLI", async () => {
     const folderUri = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
-    if (!folderUri) {
-      vscode.window.showErrorMessage("No workspace folder found.");
-      return;
-    }
+      if (!folderUri) {
+        if (services.config.load().showNotifications) {
+          vscode.window.showErrorMessage("No workspace folder found.");
+        }
+        return;
+      }
     await vscode.commands.executeCommand("extension.exportCodeToText", vscode.Uri.file(folderUri));
   });
 
@@ -100,163 +220,19 @@ export function activate(context: vscode.ExtensionContext) {
 interface UserSelections {
   selectedExtensions: string[];
   selectedTemplate: string;
+  exportPreset: ExportPreset;
+  selectedProfileId: string;
+  privacyModeEnabled: boolean;
+  openAfterExport: boolean;
+  notebooklmUploadEnabled: boolean;
   skipEmpty: boolean;
   outputFormat: string;
   outputPath: string;
+  showPreview: boolean;
 }
 
-async function getUserSelections(
+async function showFilePreview(
   services: ReturnType<typeof ServiceContainerFactory.create>,
-  config: ReturnType<typeof services.config.load>,
-  folderUri: string
-): Promise<UserSelections | null> {
-  let selectedExtensions: string[] = [];
-  let selectedTemplate = "default-md";
-
-  // Get last choices if remember is enabled
-  const lastChoices = config.rememberLastChoice ? services.state.getLastChoices() : undefined;
-
-  // Detect project type and offer preset
-  if (config.enablePresets) {
-    const detectedType = services.preset.detectProjectType(folderUri);
-    if (detectedType) {
-      const preset = services.preset.getPreset(detectedType);
-      const usePreset = await vscode.window.showQuickPick(
-        ["Use preset: " + preset!.name, "Custom selection"],
-        { title: `Detected ${preset!.name} - Use preset?`, placeHolder: "Choose export method" }
-      );
-
-      if (usePreset?.startsWith("Use preset")) {
-        selectedExtensions = preset!.extensions;
-        selectedTemplate = preset!.template;
-      }
-    }
-  }
-
-  // If no preset selected, show extension selection
-  if (selectedExtensions.length === 0) {
-    const rawFiles = services.fileSystem.getAllFiles(folderUri);
-    const allExtensions = Array.from(
-      new Set(rawFiles.map((f) => path.extname(f)).filter((e) => e))
-    ).sort();
-
-    // Pre-select last used extensions if available
-    const extensionItems = allExtensions.map((ext) => ({
-      label: ext,
-      picked: lastChoices?.extensions?.includes(ext) ?? false
-    }));
-
-    const extensionChoice = await vscode.window.showQuickPick(extensionItems, {
-      canPickMany: true,
-      title: "Select extensions to include in export",
-      placeHolder: lastChoices?.extensions?.length
-        ? `Last used: ${lastChoices.extensions.join(", ")}`
-        : config.defaultExtensions.join(", ")
-    });
-
-    if (!extensionChoice || extensionChoice.length === 0) return null;
-    selectedExtensions = extensionChoice.map((e) => e.label);
-  }
-
-  // Template selection
-  if (config.includeMetadata) {
-    const templateOptions = services.template.getTemplateNames().map((key) => ({
-      label: services.template["templates"].get(key)!.name,
-      description: key,
-      picked: lastChoices?.template === key
-    }));
-
-    const templateChoice = await vscode.window.showQuickPick(templateOptions, {
-      title: "Select output template",
-      placeHolder: "Choose formatting template"
-    });
-
-    if (templateChoice) {
-      selectedTemplate = templateChoice.description;
-    }
-  } else if (lastChoices?.template) {
-    selectedTemplate = lastChoices.template;
-  }
-
-  // Skip empty files
-  let skipEmpty = config.skipEmptyFiles === "exclude";
-  if (config.skipEmptyFiles === "ask") {
-    const defaultChoice = lastChoices?.skipEmpty !== undefined
-      ? (lastChoices.skipEmpty ? "Exclude empty files" : "Include empty files")
-      : undefined;
-
-    const userChoice = await vscode.window.showQuickPick(
-      ["Include empty files", "Exclude empty files"],
-      {
-        title: "Include empty files in export?",
-        placeHolder: defaultChoice ? `Last: ${defaultChoice}` : "Choose whether to skip or include"
-      }
-    );
-    if (!userChoice) return null;
-    skipEmpty = userChoice === "Exclude empty files";
-  }
-
-  // Output format - use last choice as default
-  const formatItems = [
-    { label: ".md", description: "Markdown with code blocks" },
-    { label: ".txt", description: "Plain text with separators" },
-    { label: ".json", description: "Structured JSON (for programmatic use)" }
-  ];
-  const defaultFormat = lastChoices?.outputFormat || config.outputFormat;
-  // Put last used format first
-  if (defaultFormat) {
-    formatItems.sort((a, b) => (a.label === defaultFormat ? -1 : b.label === defaultFormat ? 1 : 0));
-  }
-
-  const formatChoice = await vscode.window.showQuickPick(formatItems, {
-    placeHolder: `Select export format${lastChoices?.outputFormat ? ` (last: ${lastChoices.outputFormat})` : ""}`
-  });
-  const outputFormat = formatChoice?.label || config.outputFormat;
-
-  // File name
-  const defaultFileName = `${path.basename(folderUri)}-code${outputFormat}`;
-  const customFileName = await vscode.window.showInputBox({
-    prompt: "Enter output file name",
-    value: defaultFileName,
-    validateInput: (val) =>
-      /[<>:"/\\|?*]/.test(val) ? "Filename contains invalid characters." : null
-  });
-
-  if (!customFileName) return null;
-
-  // Output location
-  const filterName = outputFormat === ".md" ? "Markdown" : outputFormat === ".json" ? "JSON" : "Text";
-  const outputUri = await vscode.window.showSaveDialog({
-    defaultUri: vscode.Uri.file(path.join(folderUri, customFileName)),
-    filters: {
-      [filterName]: [outputFormat.replace(".", "")]
-    }
-  });
-
-  if (!outputUri) return null;
-
-  // Save choices for next time if enabled
-  if (config.rememberLastChoice) {
-    await services.state.saveLastChoices({
-      extensions: selectedExtensions,
-      template: selectedTemplate,
-      outputFormat,
-      skipEmpty
-    });
-  }
-
-  return {
-    selectedExtensions,
-    selectedTemplate,
-    skipEmpty,
-    outputFormat,
-    outputPath: outputUri.fsPath
-  };
-}
-
-async function showPreview(
-  services: ReturnType<typeof ServiceContainerFactory.create>,
-  config: ReturnType<typeof services.config.load>,
   folderUri: string,
   files: string[]
 ): Promise<string[] | null> {
@@ -266,7 +242,7 @@ async function showPreview(
 
   for (const file of files) {
     try {
-      const stats = services.fileSystem.getFileStats(file);
+      const stats = await services.fileSystem.getFileStats(file);
       const relativePath = path.relative(folderUri, file);
       const sizeKB = (stats.size / 1024).toFixed(1);
       const tokens = Math.ceil(stats.size / 4);
@@ -294,23 +270,6 @@ async function showPreview(
       ? `${(totalTokens / 1000).toFixed(1)}k`
       : `${(totalTokens / 1000000).toFixed(2)}M`;
 
-  // If "ask" mode, first ask if user wants to see preview
-  if (config.showPreview === "ask") {
-    const wantPreview = await vscode.window.showQuickPick(
-      [
-        { label: "$(eye) Show preview", description: "Review and modify file list before export" },
-        { label: "$(play) Export now", description: `Export all ${files.length} files (${totalSizeFormatted}, ~${totalTokensFormatted} tokens)` }
-      ],
-      {
-        title: `Ready to export ${files.length} files`,
-        placeHolder: "Choose an option"
-      }
-    );
-
-    if (!wantPreview) return null;
-    if (wantPreview.label.includes("Export now")) return files;
-  }
-
   // Show preview with file selection
   const selected = await vscode.window.showQuickPick(fileItems, {
     canPickMany: true,
@@ -320,327 +279,13 @@ async function showPreview(
 
   if (!selected) return null;
   if (selected.length === 0) {
-    vscode.window.showWarningMessage("No files selected for export.");
+    if (services.config.load().showNotifications) {
+      vscode.window.showWarningMessage("No files selected for export.");
+    }
     return null;
   }
 
   return selected.map((item) => item.filePath);
-}
-
-interface ProcessOptions {
-  folderUri: string;
-  filteredFiles: string[];
-  selectedTemplate: string;
-  skipEmpty: boolean;
-  outputFormat: string;
-  outputPath: string;
-}
-
-async function processFiles(
-  services: ReturnType<typeof ServiceContainerFactory.create>,
-  config: ReturnType<typeof services.config.load>,
-  options: ProcessOptions
-): Promise<void> {
-  const { folderUri, filteredFiles, selectedTemplate, skipEmpty, outputFormat, outputPath } = options;
-
-  // Use different processing for JSON format
-  if (outputFormat === ".json") {
-    await processFilesAsJson(services, config, options);
-    return;
-  }
-
-  const optimization = buildOptimizationPipeline(
-    config.aiContextOptimizer,
-    filteredFiles,
-    folderUri,
-    (filePath) => services.fileSystem.getFileStats(filePath)
-  );
-  let totalOptimizedTokens = 0;
-
-  const managers = ServiceContainerFactory.createExportManagers(
-    outputPath,
-    outputFormat,
-    config.maxChunkSize
-  );
-
-  await vscode.window.withProgress(
-    { location: vscode.ProgressLocation.Notification, title: "Exporting code...", cancellable: false },
-    async (progress) => {
-      for (let i = 0; i < optimization.orderedFiles.length; i++) {
-        const file = optimization.orderedFiles[i];
-        managers.logger.incrementTotal();
-
-        try {
-          let content = services.fileSystem.readFile(file);
-          if (config.compactMode) content = content.replace(/\s+/g, " ");
-          const relativePath = path.relative(folderUri, file);
-          const extension = path.extname(file).replace(".", "");
-          const optimizedResult = optimizeContent(content, file, extension, optimization.optimizer);
-          const optimizedContent = optimizedResult.optimizedContent;
-
-          if (skipEmpty && optimizedContent.trim().length === 0) {
-            managers.logger.recordSkipped(file, "empty");
-            continue;
-          }
-
-          if (optimization.useOptimizer && wouldExceedBudget(
-            totalOptimizedTokens,
-            optimizedResult.optimizedTokens,
-            optimization.maxTokenBudget
-          )) {
-            managers.logger.recordSkipped(file, "budget");
-            continue;
-          }
-
-          totalOptimizedTokens += optimizedResult.optimizedTokens;
-          const lines = optimizedContent.split("\n").length;
-
-          const formatted = services.template.formatContent(
-            selectedTemplate,
-            relativePath,
-            optimizedContent,
-            file,
-            outputFormat
-          );
-
-          managers.chunk.addContent(formatted);
-          managers.logger.recordProcessed(
-            optimizedContent.length,
-            lines,
-            optimizedResult.optimizedTokens,
-            extension
-          );
-
-          // Update status bar
-          const stats = managers.logger.getStats();
-          services.statusBar.setExporting(
-            i + 1,
-            optimization.orderedFiles.length,
-            stats.estimatedTokens,
-            stats.totalSize
-          );
-        } catch (err) {
-          managers.logger.recordError(file, err as Error);
-        }
-
-        progress.report({
-          increment: ((i + 1) / optimization.orderedFiles.length) * 100,
-          message: `Processing: ${path.basename(file)}`
-        });
-      }
-
-      const writtenFiles = managers.chunk.finalize();
-
-      // Show completion status
-      const finalStats = managers.logger.getStats();
-      services.statusBar.setComplete(finalStats.processedFiles, finalStats.estimatedTokens, finalStats.totalSize);
-
-      if (config.copyToClipboard && writtenFiles.length > 0) {
-        const clipboardContent = fs.readFileSync(writtenFiles[0], "utf8");
-        await vscode.env.clipboard.writeText(clipboardContent);
-      }
-
-      // Show result message
-      const stats = managers.logger.getStats();
-      const message = config.showTokenEstimate
-        ? managers.logger.formatSummary()
-        : `Code exported to: ${outputPath}\nFiles written: ${stats.processedFiles}, skipped: ${stats.skippedFiles}`;
-
-      const actions = ["Open File"];
-      if (stats.errorFiles > 0) actions.push("View Errors");
-      if (config.showTokenEstimate) actions.push("View Details");
-
-      const action = config.openAfterExport
-        ? await vscode.window.showInformationMessage(message, ...actions)
-        : await vscode.window.showInformationMessage(message, ...actions.slice(1));
-
-      if (stats.errorFiles > 0) {
-        console.warn("Errors:", stats.errors);
-      }
-
-      if (action === "Open File") {
-        vscode.window.showTextDocument(vscode.Uri.file(writtenFiles[0]));
-      } else if (action === "View Errors") {
-        await managers.logger.showDetailedReport();
-      } else if (action === "View Details") {
-        vscode.window.showInformationMessage(managers.logger.formatDetailedSummary());
-      }
-    }
-  );
-}
-
-async function processFilesAsJson(
-  services: ReturnType<typeof ServiceContainerFactory.create>,
-  config: ReturnType<typeof services.config.load>,
-  options: ProcessOptions
-): Promise<void> {
-  const { folderUri, filteredFiles, skipEmpty, outputPath } = options;
-
-  const optimization = buildOptimizationPipeline(
-    config.aiContextOptimizer,
-    filteredFiles,
-    folderUri,
-    (filePath) => services.fileSystem.getFileStats(filePath)
-  );
-
-  const jsonFiles: JsonExportFile[] = [];
-  let totalSize = 0;
-  let totalLines = 0;
-  let totalTokens = 0;
-  let totalOriginalTokens = 0;
-  const extensions = new Set<string>();
-  let processedCount = 0;
-  let skippedCount = 0;
-  const dependencyAnalyzer = config.includeDependencyGraph
-    ? new DependencyAnalyzer(folderUri)
-    : null;
-
-  await vscode.window.withProgress(
-    { location: vscode.ProgressLocation.Notification, title: "Exporting to JSON...", cancellable: false },
-    async (progress) => {
-      for (let i = 0; i < optimization.orderedFiles.length; i++) {
-        const file = optimization.orderedFiles[i];
-
-        try {
-          let content = services.fileSystem.readFile(file);
-          if (config.compactMode) content = content.replace(/\s+/g, " ");
-          const stats = services.fileSystem.getFileStats(file);
-          const relativePath = path.relative(folderUri, file);
-          const ext = path.extname(file).replace(".", "");
-          const optimizedResult = optimizeContent(content, file, ext, optimization.optimizer);
-          const optimizedContent = optimizedResult.optimizedContent;
-
-          if (skipEmpty && optimizedContent.trim().length === 0) {
-            skippedCount++;
-            continue;
-          }
-
-          if (optimization.useOptimizer && wouldExceedBudget(
-            totalTokens,
-            optimizedResult.optimizedTokens,
-            optimization.maxTokenBudget
-          )) {
-            skippedCount++;
-            continue;
-          }
-
-          const lines = optimizedContent.split("\n").length;
-
-          extensions.add(ext);
-          totalSize += optimizedContent.length;
-          totalLines += lines;
-          totalTokens += optimizedResult.optimizedTokens;
-          totalOriginalTokens += optimizedResult.originalTokens;
-          processedCount++;
-
-          if (dependencyAnalyzer) {
-            dependencyAnalyzer.addFile(relativePath, optimizedContent);
-          }
-
-          jsonFiles.push({
-            path: relativePath,
-            extension: ext,
-            content: optimizedContent,
-            size: optimizedContent.length,
-            lines,
-            tokens: optimizedResult.optimizedTokens,
-            modified: stats.mtime.toISOString()
-          });
-
-          // Update status bar
-          services.statusBar.setExporting(
-            i + 1,
-            optimization.orderedFiles.length,
-            totalTokens,
-            totalSize
-          );
-        } catch (err) {
-          console.warn(`Failed to process ${file}:`, err);
-        }
-
-        progress.report({
-          increment: ((i + 1) / optimization.orderedFiles.length) * 100,
-          message: `Processing: ${path.basename(file)}`
-        });
-      }
-
-      // Build JSON output
-      const jsonOutput: JsonExportOutput = {
-        metadata: {
-          exportedAt: new Date().toISOString(),
-          sourceFolder: path.basename(folderUri),
-          totalFiles: processedCount,
-          totalSize,
-          totalLines,
-          estimatedTokens: totalTokens,
-          extensions: Array.from(extensions).sort(),
-          version: "1.0"
-        },
-        files: jsonFiles
-      };
-
-      if (dependencyAnalyzer) {
-        const graph = dependencyAnalyzer.analyze();
-        const dependencies: Record<string, string[]> = {};
-
-        for (const node of graph.nodes) {
-          dependencies[node] = [];
-        }
-
-        for (const edge of graph.edges) {
-          if (!dependencies[edge.from]) dependencies[edge.from] = [];
-          if (!dependencies[edge.from].includes(edge.to)) {
-            dependencies[edge.from].push(edge.to);
-          }
-        }
-
-        for (const node of Object.keys(dependencies)) {
-          dependencies[node].sort();
-        }
-
-        jsonOutput.metadata.dependencies = dependencies;
-        jsonOutput.dependencyGraph = graph;
-      }
-
-      if (optimization.useOptimizer && optimization.optimizer) {
-        jsonOutput.optimizationStats = optimization.optimizer.getStats(
-          totalOriginalTokens,
-          totalTokens
-        );
-      }
-
-      // Write JSON file
-      fs.writeFileSync(outputPath, JSON.stringify(jsonOutput, null, 2), "utf8");
-
-      // Show completion status
-      services.statusBar.setComplete(processedCount, totalTokens, totalSize);
-
-      if (config.copyToClipboard) {
-        await vscode.env.clipboard.writeText(JSON.stringify(jsonOutput, null, 2));
-      }
-
-      // Show result message
-      const sizeFormatted = totalSize < 1024 * 1024
-        ? `${(totalSize / 1024).toFixed(1)} KB`
-        : `${(totalSize / (1024 * 1024)).toFixed(2)} MB`;
-      const tokensFormatted = totalTokens < 1000
-        ? totalTokens.toString()
-        : `${(totalTokens / 1000).toFixed(1)}k`;
-
-      const message = `JSON exported: ${processedCount} files | ${sizeFormatted} | ~${tokensFormatted} tokens`;
-
-      const actions = ["Open File"];
-      if (skippedCount > 0) actions.push(`${skippedCount} Skipped`);
-
-      const action = config.openAfterExport
-        ? await vscode.window.showInformationMessage(message, ...actions)
-        : await vscode.window.showInformationMessage(message);
-
-      if (action === "Open File") {
-        vscode.window.showTextDocument(vscode.Uri.file(outputPath));
-      }
-    }
-  );
 }
 
 export function deactivate() {}

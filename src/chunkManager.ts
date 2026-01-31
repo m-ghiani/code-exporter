@@ -1,4 +1,4 @@
-import * as fs from "fs";
+import * as fs from "fs/promises";
 
 export class ChunkManager {
   private chunkIndex = 0;
@@ -6,6 +6,7 @@ export class ChunkManager {
   private readonly maxChunkSize: number;
   private readonly outputPath: string;
   private readonly outputFormat: string;
+  private writtenFiles: string[] = [];
 
   constructor(outputPath: string, outputFormat: string, maxChunkSize = 500000) {
     this.outputPath = outputPath;
@@ -13,16 +14,17 @@ export class ChunkManager {
     this.maxChunkSize = maxChunkSize;
   }
 
-  addContent(content: string): void {
+  async addContent(content: string): Promise<void> {
     if ((this.buffer.length + content.length) > this.maxChunkSize && this.buffer.length > 0) {
-      this.writeCurrentChunk();
+      await this.writeCurrentChunk();
     }
     this.buffer += content;
   }
 
-  private writeCurrentChunk(): void {
+  private async writeCurrentChunk(): Promise<void> {
     const chunkPath = this.getChunkPath();
-    fs.writeFileSync(chunkPath, this.buffer, "utf8");
+    await fs.writeFile(chunkPath, this.buffer, "utf8");
+    this.writtenFiles.push(chunkPath);
     this.buffer = "";
     this.chunkIndex++;
   }
@@ -33,16 +35,15 @@ export class ChunkManager {
     return `${basePath}-part${this.chunkIndex + 1}${this.outputFormat}`;
   }
 
-  finalize(): string[] {
-    const writtenFiles: string[] = [];
-    
+  async finalize(): Promise<string[]> {
     if (this.buffer.length > 0) {
       const finalPath = this.getChunkPath();
-      fs.writeFileSync(finalPath, this.buffer, "utf8");
-      writtenFiles.push(finalPath);
+      await fs.writeFile(finalPath, this.buffer, "utf8");
+      this.writtenFiles.push(finalPath);
+      this.buffer = "";
     }
 
-    return writtenFiles;
+    return [...this.writtenFiles];
   }
 
   getChunkCount(): number {

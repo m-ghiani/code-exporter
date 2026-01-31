@@ -39,7 +39,7 @@ exports.optimizeContent = optimizeContent;
 exports.wouldExceedBudget = wouldExceedBudget;
 const path = __importStar(require("path"));
 const contextOptimizer_1 = require("./contextOptimizer");
-function prioritizeFiles(files, folderUri, getFileStats, prioritizeRecentFiles) {
+async function prioritizeFiles(files, folderUri, getFileStats, prioritizeRecentFiles) {
     const entryBaseNames = new Set([
         "index",
         "main",
@@ -61,7 +61,7 @@ function prioritizeFiles(files, folderUri, getFileStats, prioritizeRecentFiles) 
         "webpack.config.js",
         "webpack.config.ts"
     ]);
-    const scored = files.map((file) => {
+    const scored = await Promise.all(files.map(async (file) => {
         const relativePath = path.relative(folderUri, file);
         const ext = path.extname(file);
         const baseName = path.basename(file, ext).toLowerCase();
@@ -79,13 +79,14 @@ function prioritizeFiles(files, folderUri, getFileStats, prioritizeRecentFiles) 
         }
         let mtime = 0;
         try {
-            mtime = getFileStats(file).mtime.getTime();
+            const stats = await getFileStats(file);
+            mtime = stats.mtime.getTime();
         }
         catch {
             mtime = 0;
         }
         return { file, score, mtime, relativePath };
-    });
+    }));
     return scored
         .sort((a, b) => {
         if (a.score !== b.score)
@@ -96,10 +97,10 @@ function prioritizeFiles(files, folderUri, getFileStats, prioritizeRecentFiles) 
     })
         .map((item) => item.file);
 }
-function buildOptimizationPipeline(config, files, folderUri, getFileStats) {
+async function buildOptimizationPipeline(config, files, folderUri, getFileStats) {
     const useOptimizer = config?.enabled === true;
     const orderedFiles = useOptimizer
-        ? prioritizeFiles(files, folderUri, getFileStats, config.prioritizeRecentFiles)
+        ? await prioritizeFiles(files, folderUri, getFileStats, config.prioritizeRecentFiles)
         : files;
     const optimizer = useOptimizer ? new contextOptimizer_1.ContextOptimizer(config) : null;
     const maxTokenBudget = useOptimizer && config.maxTokenBudget > 0

@@ -94,7 +94,9 @@ class ExportLogger {
             .join(', ');
         return `${summary}\nFile types: ${fileTypesList}`;
     }
-    async showDetailedReport() {
+    async showDetailedReport(showNotifications = true) {
+        if (!showNotifications)
+            return;
         if (this.stats.errors.length > 0) {
             const showErrors = await vscode.window.showWarningMessage(`${this.stats.errorFiles} files had errors. View details?`, 'View Errors', 'View Summary');
             if (showErrors === 'View Errors') {

@@ -1,5 +1,13 @@
 import * as vscode from "vscode";
-import { AiContextOptimizerConfig, ExportConfig, IConfigService, SmartFilters } from "./types";
+import {
+  AiContextOptimizerConfig,
+  ExportConfig,
+  IConfigService,
+  NotebookLmEnterpriseConfig,
+  PrivacyModeConfig,
+  SmartFilters,
+  UserProfile
+} from "./types";
 
 const DEFAULT_SMART_FILTERS: SmartFilters = {
   autoExclude: ["node_modules", "dist", "build", ".git", "coverage", ".vscode", ".idea"],
@@ -37,10 +45,29 @@ const DEFAULT_AI_CONTEXT_OPTIMIZER: AiContextOptimizerConfig = {
   enabled: false,
   maxTokenBudget: 100000,
   removeComments: true,
+  removeDocstrings: true,
   minifyWhitespace: true,
   truncateLargeFiles: true,
   maxLinesPerFile: 500,
   prioritizeRecentFiles: true
+};
+
+const DEFAULT_PRIVACY_MODE: PrivacyModeConfig = {
+  enabled: false,
+  maskEmails: true,
+  maskTokens: true,
+  maskApiKeys: true,
+  placeholder: "[REDACTED]",
+  customPatterns: []
+};
+
+const DEFAULT_NOTEBOOKLM_ENTERPRISE: NotebookLmEnterpriseConfig = {
+  enabled: false,
+  projectNumber: "",
+  location: "global",
+  endpointLocation: "us-",
+  notebookId: "",
+  accessToken: ""
 };
 
 export class ConfigService implements IConfigService {
@@ -56,6 +83,8 @@ export class ConfigService implements IConfigService {
       outputFormat: this.config.get<string>("outputFormat", ".md"),
       openAfterExport: this.config.get<boolean>("openAfterExport", true),
       copyToClipboard: this.config.get<boolean>("copyToClipboard", false),
+      showNotifications: this.config.get<boolean>("showNotifications", false),
+      logVerbose: this.config.get<boolean>("logVerbose", false),
       compactMode: this.config.get<boolean>("compactMode", false),
       dryRun: this.config.get<boolean>("dryRun", false),
       skipEmptyFiles: this.config.get<"include" | "exclude" | "ask">("skipEmptyFiles", "ask"),
@@ -74,7 +103,13 @@ export class ConfigService implements IConfigService {
         "aiContextOptimizer",
         DEFAULT_AI_CONTEXT_OPTIMIZER
       ),
-      includeDependencyGraph: this.config.get<boolean>("includeDependencyGraph", true)
+      includeDependencyGraph: this.config.get<boolean>("includeDependencyGraph", true),
+      privacyMode: this.config.get<PrivacyModeConfig>("privacyMode", DEFAULT_PRIVACY_MODE),
+      userProfiles: this.config.get<UserProfile[]>("userProfiles", []),
+      notebooklmEnterprise: this.config.get<NotebookLmEnterpriseConfig>(
+        "notebooklmEnterprise",
+        DEFAULT_NOTEBOOKLM_ENTERPRISE
+      )
     };
   }
 

@@ -34,39 +34,46 @@ var __importStar = (this && this.__importStar) || (function () {
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.FileSystemService = void 0;
-const fs = __importStar(require("fs"));
+const fs = __importStar(require("fs/promises"));
 const path = __importStar(require("path"));
 class FileSystemService {
-    getAllFiles(dir) {
+    async getAllFiles(dir) {
         try {
-            const entries = fs.readdirSync(dir, { withFileTypes: true });
+            const entries = await fs.readdir(dir, { withFileTypes: true });
             const files = entries
                 .filter((file) => !file.isDirectory())
                 .map((file) => path.join(dir, file.name));
             const folders = entries.filter((folder) => folder.isDirectory());
-            for (const folder of folders) {
+            const nested = await Promise.all(folders.map(async (folder) => {
                 try {
-                    files.push(...this.getAllFiles(path.join(dir, folder.name)));
+                    return await this.getAllFiles(path.join(dir, folder.name));
                 }
                 catch (error) {
                     console.warn(`Failed to read directory ${folder.name}:`, error);
+                    return [];
                 }
-            }
-            return files;
+            }));
+            return files.concat(...nested);
         }
         catch (error) {
             console.warn(`Failed to read directory ${dir}:`, error);
             return [];
         }
     }
-    readFile(filePath) {
-        return fs.readFileSync(filePath, "utf8");
+    async readFile(filePath) {
+        return await fs.readFile(filePath, "utf8");
     }
-    fileExists(filePath) {
-        return fs.existsSync(filePath);
+    async fileExists(filePath) {
+        try {
+            await fs.access(filePath);
+            return true;
+        }
+        catch {
+            return false;
+        }
     }
-    getFileStats(filePath) {
-        const stats = fs.statSync(filePath);
+    async getFileStats(filePath) {
+        const stats = await fs.stat(filePath);
         return { size: stats.size, mtime: stats.mtime };
     }
 }

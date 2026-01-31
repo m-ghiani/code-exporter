@@ -1,1 +1,13 @@
 token.txt
+*.vsix
+.vscode/
+.DS_Store
+node_modules/
+dist/   
+.env
+.cache/
+coverage/
+.idea/
+*.log
+*.swp
+*.swo

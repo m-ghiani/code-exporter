@@ -8,7 +8,7 @@ import {
 import { ContextOptimizer } from "../contextOptimizer";
 import { AiContextOptimizerConfig } from "../types";
 
-test("prioritizeFiles favors entry points over recency", () => {
+test("prioritizeFiles favors entry points over recency", async () => {
   const files = [
     "/repo/src/feature.ts",
     "/repo/src/index.ts",
@@ -20,27 +20,27 @@ test("prioritizeFiles favors entry points over recency", () => {
     ["/repo/README.md", new Date("2026-01-01T00:00:00Z")]
   ]);
 
-  const ordered = prioritizeFiles(
+  const ordered = await prioritizeFiles(
     files,
     "/repo",
-    (filePath) => ({ mtime: stats.get(filePath) ?? new Date(0) }),
+    async (filePath) => ({ mtime: stats.get(filePath) ?? new Date(0) }),
     true
   );
 
   assert.equal(ordered[0], "/repo/src/index.ts");
 });
 
-test("prioritizeFiles uses recency when scores match", () => {
+test("prioritizeFiles uses recency when scores match", async () => {
   const files = ["/repo/src/a.ts", "/repo/src/b.ts"];
   const stats = new Map<string, Date>([
     ["/repo/src/a.ts", new Date("2024-01-01T00:00:00Z")],
     ["/repo/src/b.ts", new Date("2025-01-01T00:00:00Z")]
   ]);
 
-  const ordered = prioritizeFiles(
+  const ordered = await prioritizeFiles(
     files,
     "/repo",
-    (filePath) => ({ mtime: stats.get(filePath) ?? new Date(0) }),
+    async (filePath) => ({ mtime: stats.get(filePath) ?? new Date(0) }),
     true
   );
 
@@ -52,6 +52,7 @@ test("optimizeContent uses optimizer when provided", () => {
     enabled: true,
     maxTokenBudget: 100000,
     removeComments: true,
+    removeDocstrings: true,
     minifyWhitespace: true,
     truncateLargeFiles: false,
     maxLinesPerFile: 500,

@@ -35,12 +35,15 @@ var __importStar = (this && this.__importStar) || (function () {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.DependencyAnalyzer = void 0;
 const path = __importStar(require("path"));
+const aliasResolver_1 = require("./aliasResolver");
 class DependencyAnalyzer {
     basePath;
     fileContents;
-    constructor(basePath) {
+    aliasResolver;
+    constructor(basePath, aliasResolver) {
         this.basePath = basePath;
         this.fileContents = new Map();
+        this.aliasResolver = aliasResolver ?? new aliasResolver_1.AliasResolver({ basePath });
     }
     addFile(relativePath, content) {
         this.fileContents.set(relativePath, content);
@@ -152,8 +155,9 @@ class DependencyAnalyzer {
         return deps;
     }
     isLocalImport(importPath) {
-        // Local imports start with . or .. or are relative paths
-        return importPath.startsWith(".") || importPath.startsWith("/");
+        return importPath.startsWith(".")
+            || importPath.startsWith("/")
+            || this.aliasResolver.isAliasImport(importPath);
     }
     isPythonStdLib(moduleName) {
         // Common Python standard library modules
@@ -171,24 +175,30 @@ class DependencyAnalyzer {
         const fromDir = path.dirname(fromFile);
         // Handle relative paths
         if (depPath.startsWith(".")) {
-            let resolved = path.normalize(path.join(fromDir, depPath));
-            // Try exact match first
-            if (this.fileContents.has(resolved)) {
-                return resolved;
+            const resolved = path.normalize(path.join(fromDir, depPath));
+            return this.probeFileSystem(resolved);
+        }
+        const aliasResolved = this.aliasResolver.resolve(depPath);
+        if (aliasResolved) {
+            return this.probeFileSystem(path.normalize(aliasResolved));
+        }
+        return null;
+    }
+    probeFileSystem(basePath) {
+        if (this.fileContents.has(basePath)) {
+            return basePath;
+        }
+        const extensions = [".ts", ".tsx", ".js", ".jsx", ".vue", ".svelte", ".py", ".go", ".rs"];
+        for (const ext of extensions) {
+            const candidate = `${basePath}${ext}`;
+            if (this.fileContents.has(candidate)) {
+                return candidate;
             }
-            // Try adding common extensions
-            const extensions = [".ts", ".tsx", ".js", ".jsx", ".vue", ".svelte", ".py", ".go", ".rs"];
-            for (const ext of extensions) {
-                if (this.fileContents.has(resolved + ext)) {
-                    return resolved + ext;
-                }
-            }
-            // Try index files
-            for (const ext of extensions) {
-                const indexPath = path.join(resolved, `index${ext}`);
-                if (this.fileContents.has(indexPath)) {
-                    return indexPath;
-                }
+        }
+        for (const ext of extensions) {
+            const indexPath = path.join(basePath, `index${ext}`);
+            if (this.fileContents.has(indexPath)) {
+                return indexPath;
             }
         }
         return null;

@@ -58,46 +58,46 @@ class FilterService {
         this.sensitivePatterns = patterns;
         this.excludeSensitive = enabled;
     }
-    loadGitignore(folderUri) {
+    async loadGitignore(folderUri) {
         const gitignorePath = path.join(folderUri, ".gitignore");
         this.gitignore = (0, ignore_1.default)();
-        if (this.fileSystem.fileExists(gitignorePath)) {
-            const content = this.fileSystem.readFile(gitignorePath);
+        if (await this.fileSystem.fileExists(gitignorePath)) {
+            const content = await this.fileSystem.readFile(gitignorePath);
             this.gitignore.add(content);
         }
     }
-    loadCodedumpIgnore(folderUri, enabled) {
+    async loadCodedumpIgnore(folderUri, enabled) {
         const codedumpIgnorePath = path.join(folderUri, ".codedumpignore");
         this.codedumpIgnore = (0, ignore_1.default)();
-        if (enabled && this.fileSystem.fileExists(codedumpIgnorePath)) {
-            const content = this.fileSystem.readFile(codedumpIgnorePath);
+        if (enabled && await this.fileSystem.fileExists(codedumpIgnorePath)) {
+            const content = await this.fileSystem.readFile(codedumpIgnorePath);
             this.codedumpIgnore.add(content);
         }
     }
-    shouldIncludeFile(filePath, basePath, extensions, useSmartFilters) {
+    async shouldIncludeFile(filePath, basePath, extensions, useSmartFilters) {
+        return await this.getExcludeReason(filePath, basePath, extensions, useSmartFilters) === null;
+    }
+    async getExcludeReason(filePath, basePath, extensions, useSmartFilters) {
         const relative = path.relative(basePath, filePath);
         const fileName = path.basename(filePath);
-        // Extension filter
         if (!extensions.includes(path.extname(filePath))) {
-            return false;
+            return "extension";
         }
-        // Sensitive files filter
         if (this.excludeSensitive && this.isSensitiveFile(fileName, relative)) {
-            return false;
+            return "sensitive";
         }
-        // Gitignore filter
         if (this.gitignore.ignores(relative)) {
-            return false;
+            return "gitignore";
         }
-        // Codedumpignore filter
         if (this.codedumpIgnore.ignores(relative)) {
-            return false;
+            return "codedumpignore";
         }
-        // Smart filters
-        if (useSmartFilters && this.smartFilterManager?.shouldExcludeFile(filePath, basePath)) {
-            return false;
+        if (useSmartFilters && this.smartFilterManager) {
+            const smartReason = await this.smartFilterManager.getExcludeReason(filePath, basePath);
+            if (smartReason)
+                return smartReason;
         }
-        return true;
+        return null;
     }
     isSensitiveFile(fileName, relativePath) {
         for (const pattern of this.sensitivePatterns) {

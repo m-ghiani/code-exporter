@@ -7,7 +7,7 @@ const node_test_1 = __importDefault(require("node:test"));
 const strict_1 = __importDefault(require("node:assert/strict"));
 const exportOptimization_1 = require("../exportOptimization");
 const contextOptimizer_1 = require("../contextOptimizer");
-(0, node_test_1.default)("prioritizeFiles favors entry points over recency", () => {
+(0, node_test_1.default)("prioritizeFiles favors entry points over recency", async () => {
     const files = [
         "/repo/src/feature.ts",
         "/repo/src/index.ts",
@@ -18,16 +18,16 @@ const contextOptimizer_1 = require("../contextOptimizer");
         ["/repo/src/index.ts", new Date("2024-01-01T00:00:00Z")],
         ["/repo/README.md", new Date("2026-01-01T00:00:00Z")]
     ]);
-    const ordered = (0, exportOptimization_1.prioritizeFiles)(files, "/repo", (filePath) => ({ mtime: stats.get(filePath) ?? new Date(0) }), true);
+    const ordered = await (0, exportOptimization_1.prioritizeFiles)(files, "/repo", async (filePath) => ({ mtime: stats.get(filePath) ?? new Date(0) }), true);
     strict_1.default.equal(ordered[0], "/repo/src/index.ts");
 });
-(0, node_test_1.default)("prioritizeFiles uses recency when scores match", () => {
+(0, node_test_1.default)("prioritizeFiles uses recency when scores match", async () => {
     const files = ["/repo/src/a.ts", "/repo/src/b.ts"];
     const stats = new Map([
         ["/repo/src/a.ts", new Date("2024-01-01T00:00:00Z")],
         ["/repo/src/b.ts", new Date("2025-01-01T00:00:00Z")]
     ]);
-    const ordered = (0, exportOptimization_1.prioritizeFiles)(files, "/repo", (filePath) => ({ mtime: stats.get(filePath) ?? new Date(0) }), true);
+    const ordered = await (0, exportOptimization_1.prioritizeFiles)(files, "/repo", async (filePath) => ({ mtime: stats.get(filePath) ?? new Date(0) }), true);
     strict_1.default.deepEqual(ordered, ["/repo/src/b.ts", "/repo/src/a.ts"]);
 });
 (0, node_test_1.default)("optimizeContent uses optimizer when provided", () => {
@@ -35,6 +35,7 @@ const contextOptimizer_1 = require("../contextOptimizer");
         enabled: true,
         maxTokenBudget: 100000,
         removeComments: true,
+        removeDocstrings: true,
         minifyWhitespace: true,
         truncateLargeFiles: false,
         maxLinesPerFile: 500,

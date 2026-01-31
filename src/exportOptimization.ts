@@ -6,7 +6,7 @@ export interface FileStatsLike {
   mtime: Date;
 }
 
-export type GetFileStats = (filePath: string) => FileStatsLike;
+export type GetFileStats = (filePath: string) => Promise<FileStatsLike>;
 
 export interface OptimizationPipeline {
   useOptimizer: boolean;
@@ -21,12 +21,12 @@ export interface OptimizedContentResult {
   originalTokens: number;
 }
 
-export function prioritizeFiles(
+export async function prioritizeFiles(
   files: string[],
   folderUri: string,
   getFileStats: GetFileStats,
   prioritizeRecentFiles: boolean
-): string[] {
+): Promise<string[]> {
   const entryBaseNames = new Set([
     "index",
     "main",
@@ -49,7 +49,7 @@ export function prioritizeFiles(
     "webpack.config.ts"
   ]);
 
-  const scored = files.map((file) => {
+  const scored = await Promise.all(files.map(async (file) => {
     const relativePath = path.relative(folderUri, file);
     const ext = path.extname(file);
     const baseName = path.basename(file, ext).toLowerCase();
@@ -69,13 +69,14 @@ export function prioritizeFiles(
 
     let mtime = 0;
     try {
-      mtime = getFileStats(file).mtime.getTime();
+      const stats = await getFileStats(file);
+      mtime = stats.mtime.getTime();
     } catch {
       mtime = 0;
     }
 
     return { file, score, mtime, relativePath };
-  });
+  }));
 
   return scored
     .sort((a, b) => {
@@ -86,15 +87,15 @@ export function prioritizeFiles(
     .map((item) => item.file);
 }
 
-export function buildOptimizationPipeline(
+export async function buildOptimizationPipeline(
   config: AiContextOptimizerConfig,
   files: string[],
   folderUri: string,
   getFileStats: GetFileStats
-): OptimizationPipeline {
+): Promise<OptimizationPipeline> {
   const useOptimizer = config?.enabled === true;
   const orderedFiles = useOptimizer
-    ? prioritizeFiles(files, folderUri, getFileStats, config.prioritizeRecentFiles)
+    ? await prioritizeFiles(files, folderUri, getFileStats, config.prioritizeRecentFiles)
     : files;
   const optimizer = useOptimizer ? new ContextOptimizer(config) : null;
   const maxTokenBudget = useOptimizer && config.maxTokenBudget > 0

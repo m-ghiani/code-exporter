@@ -14,6 +14,37 @@ export interface ExportStatistics {
 
 export type SkipEmptyOption = "include" | "exclude" | "ask";
 export type ShowPreviewOption = "always" | "never" | "ask";
+export type ExportPreset = "standard" | "ai-pack";
+
+export interface PrivacyModeConfig {
+  enabled: boolean;
+  maskEmails: boolean;
+  maskTokens: boolean;
+  maskApiKeys: boolean;
+  placeholder: string;
+  customPatterns: string[];
+}
+
+export interface NotebookLmEnterpriseConfig {
+  enabled: boolean;
+  projectNumber: string;
+  location: string;
+  endpointLocation: string;
+  notebookId: string;
+  accessToken: string;
+}
+
+export interface UserProfile {
+  id: string;
+  name: string;
+  extensions?: string[];
+  template?: string;
+  outputFormat?: string;
+  skipEmpty?: boolean;
+  showPreview?: boolean;
+  exportPreset?: ExportPreset;
+  privacyModeEnabled?: boolean;
+}
 
 export interface SmartFilters {
   autoExclude: string[];
@@ -28,6 +59,7 @@ export interface AiContextOptimizerConfig {
   enabled: boolean;
   maxTokenBudget: number;
   removeComments: boolean;
+  removeDocstrings: boolean;
   minifyWhitespace: boolean;
   truncateLargeFiles: boolean;
   maxLinesPerFile: number;
@@ -67,6 +99,8 @@ export interface ExportConfig {
   outputFormat: string;
   openAfterExport: boolean;
   copyToClipboard: boolean;
+  showNotifications: boolean;
+  logVerbose: boolean;
   compactMode: boolean;
   dryRun: boolean;
   skipEmptyFiles: SkipEmptyOption;
@@ -83,6 +117,9 @@ export interface ExportConfig {
   showPreview: ShowPreviewOption;
   aiContextOptimizer: AiContextOptimizerConfig;
   includeDependencyGraph: boolean;
+  privacyMode: PrivacyModeConfig;
+  userProfiles: UserProfile[];
+  notebooklmEnterprise: NotebookLmEnterpriseConfig;
 }
 
 // Last user choices for "remember last choice" feature
@@ -91,14 +128,19 @@ export interface LastExportChoices {
   template?: string;
   outputFormat?: string;
   skipEmpty?: boolean;
+  preset?: ExportPreset;
+  profileId?: string;
+  outputPath?: string;
+  openAfterExport?: boolean;
+  notebooklmUpload?: boolean;
 }
 
 // Service interfaces for dependency injection
 export interface IFileSystemService {
-  getAllFiles(dir: string): string[];
-  readFile(filePath: string): string;
-  fileExists(filePath: string): boolean;
-  getFileStats(filePath: string): { size: number; mtime: Date };
+  getAllFiles(dir: string): Promise<string[]>;
+  readFile(filePath: string): Promise<string>;
+  fileExists(filePath: string): Promise<boolean>;
+  getFileStats(filePath: string): Promise<{ size: number; mtime: Date }>;
 }
 
 export interface IConfigService {
@@ -107,14 +149,20 @@ export interface IConfigService {
 }
 
 export interface IFilterService {
-  loadGitignore(folderUri: string): void;
-  loadCodedumpIgnore(folderUri: string, enabled: boolean): void;
+  loadGitignore(folderUri: string): Promise<void>;
+  loadCodedumpIgnore(folderUri: string, enabled: boolean): Promise<void>;
   shouldIncludeFile(
     filePath: string,
     basePath: string,
     extensions: string[],
     useSmartFilters: boolean
-  ): boolean;
+  ): Promise<boolean>;
+  getExcludeReason(
+    filePath: string,
+    basePath: string,
+    extensions: string[],
+    useSmartFilters: boolean
+  ): Promise<string | null>;
 }
 
 // Service container for dependency injection
@@ -137,6 +185,23 @@ export interface JsonExportMetadata {
   dependencies?: Record<string, string[]>;
 }
 
+export interface ContextSummaryFile {
+  path: string;
+  reason: string;
+}
+
+export interface AiContextSummary {
+  preset: ExportPreset;
+  formatVersion: string;
+  tokenBudget: number;
+  includedCount: number;
+  excludedCount: number;
+  included: ContextSummaryFile[];
+  excluded: ContextSummaryFile[];
+  selectionNotes: string[];
+  promptTemplate: string;
+}
+
 export interface JsonExportFile {
   path: string;
   extension: string;
@@ -152,6 +217,8 @@ export interface JsonExportOutput {
   files: JsonExportFile[];
   dependencyGraph?: DependencyGraph;
   optimizationStats?: OptimizationStats;
+  contextSummary?: AiContextSummary;
+  privacyReport?: PrivacyReport;
 }
 
 // Dependency graph for understanding file relationships
@@ -174,4 +241,17 @@ export interface OptimizationStats {
   savingsPercent: number;
   truncatedFiles: string[];
   commentsRemoved: number;
+  docstringsRemoved: number;
+}
+
+export interface PrivacyReportFile {
+  path: string;
+  masked: number;
+}
+
+export interface PrivacyReport {
+  enabled: boolean;
+  totalMasked: number;
+  byType: Record<string, number>;
+  files: PrivacyReportFile[];
 }

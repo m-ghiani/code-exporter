@@ -34,27 +34,29 @@ var __importStar = (this && this.__importStar) || (function () {
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.ChunkManager = void 0;
-const fs = __importStar(require("fs"));
+const fs = __importStar(require("fs/promises"));
 class ChunkManager {
     chunkIndex = 0;
     buffer = "";
     maxChunkSize;
     outputPath;
     outputFormat;
+    writtenFiles = [];
     constructor(outputPath, outputFormat, maxChunkSize = 500000) {
         this.outputPath = outputPath;
         this.outputFormat = outputFormat;
         this.maxChunkSize = maxChunkSize;
     }
-    addContent(content) {
+    async addContent(content) {
         if ((this.buffer.length + content.length) > this.maxChunkSize && this.buffer.length > 0) {
-            this.writeCurrentChunk();
+            await this.writeCurrentChunk();
         }
         this.buffer += content;
     }
-    writeCurrentChunk() {
+    async writeCurrentChunk() {
         const chunkPath = this.getChunkPath();
-        fs.writeFileSync(chunkPath, this.buffer, "utf8");
+        await fs.writeFile(chunkPath, this.buffer, "utf8");
+        this.writtenFiles.push(chunkPath);
         this.buffer = "";
         this.chunkIndex++;
     }
@@ -64,14 +66,14 @@ class ChunkManager {
         const basePath = this.outputPath.replace(this.outputFormat, "");
         return `${basePath}-part${this.chunkIndex + 1}${this.outputFormat}`;
     }
-    finalize() {
-        const writtenFiles = [];
+    async finalize() {
         if (this.buffer.length > 0) {
             const finalPath = this.getChunkPath();
-            fs.writeFileSync(finalPath, this.buffer, "utf8");
-            writtenFiles.push(finalPath);
+            await fs.writeFile(finalPath, this.buffer, "utf8");
+            this.writtenFiles.push(finalPath);
+            this.buffer = "";
         }
-        return writtenFiles;
+        return [...this.writtenFiles];
     }
     getChunkCount() {
         return this.chunkIndex + (this.buffer.length > 0 ? 1 : 0);

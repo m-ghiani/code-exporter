@@ -4,7 +4,7 @@
   "description": "Export all code in a folder to a single .txt or .md file. Useful for archiving or AI-based code analysis.",
   "publisher": "mghiani",
   "license": "MIT",
-  "version": "1.4.1",
+  "version": "1.4.7",
   "icon": "logo.png",
   "engines": {
     "vscode": "^1.102.0"
@@ -72,10 +72,11 @@
           "enum": [
             ".txt",
             ".md",
-            ".json"
+            ".json",
+            ".pdf"
           ],
           "default": ".md",
-          "description": "Default output format for the exported file (.txt, .md, or .json for structured output)."
+          "description": "Default output format for the exported file (.txt, .md, .json for structured output, or .pdf)."
         },
         "codeDump.openAfterExport": {
           "type": "boolean",
@@ -86,6 +87,16 @@
           "type": "boolean",
           "default": false,
           "description": "Copy exported content to clipboard."
+        },
+        "codeDump.showNotifications": {
+          "type": "boolean",
+          "default": false,
+          "description": "Show VS Code notifications for export status and errors."
+        },
+        "codeDump.logVerbose": {
+          "type": "boolean",
+          "default": false,
+          "description": "Log every operation to the export webview log."
         },
         "codeDump.compactMode": {
           "type": "boolean",
@@ -247,6 +258,7 @@
             "enabled": false,
             "maxTokenBudget": 100000,
             "removeComments": true,
+            "removeDocstrings": true,
             "minifyWhitespace": true,
             "truncateLargeFiles": true,
             "maxLinesPerFile": 500,
@@ -266,6 +278,10 @@
               "type": "boolean",
               "description": "Remove single-line and multi-line comments."
             },
+            "removeDocstrings": {
+              "type": "boolean",
+              "description": "Remove docstrings and documentation comments."
+            },
             "minifyWhitespace": {
               "type": "boolean",
               "description": "Reduce excessive blank lines and trailing whitespace."
@@ -281,6 +297,140 @@
             "prioritizeRecentFiles": {
               "type": "boolean",
               "description": "Prioritize recently modified files when budget is limited."
+            }
+          }
+        },
+        "codeDump.privacyMode": {
+          "type": "object",
+          "default": {
+            "enabled": false,
+            "maskEmails": true,
+            "maskTokens": true,
+            "maskApiKeys": true,
+            "placeholder": "[REDACTED]",
+            "customPatterns": []
+          },
+          "description": "Privacy mode settings for masking sensitive data during export.",
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "description": "Enable privacy mode masking during export."
+            },
+            "maskEmails": {
+              "type": "boolean",
+              "description": "Mask email addresses."
+            },
+            "maskTokens": {
+              "type": "boolean",
+              "description": "Mask tokens (JWT, bearer, common token prefixes)."
+            },
+            "maskApiKeys": {
+              "type": "boolean",
+              "description": "Mask API keys and secrets in key/value assignments."
+            },
+            "placeholder": {
+              "type": "string",
+              "description": "Placeholder used for masked values."
+            },
+            "customPatterns": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "Custom regex patterns to mask."
+            }
+          }
+        },
+        "codeDump.userProfiles": {
+          "type": "array",
+          "default": [],
+          "description": "User profiles for personalized export presets.",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "description": "Unique profile id."
+              },
+              "name": {
+                "type": "string",
+                "description": "Profile display name."
+              },
+              "extensions": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "template": {
+                "type": "string"
+              },
+              "outputFormat": {
+                "type": "string",
+                "enum": [
+                  ".txt",
+                  ".md",
+                  ".json"
+                ]
+              },
+              "skipEmpty": {
+                "type": "boolean"
+              },
+              "showPreview": {
+                "type": "boolean"
+              },
+              "exportPreset": {
+                "type": "string",
+                "enum": [
+                  "standard",
+                  "ai-pack"
+                ]
+              },
+              "privacyModeEnabled": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "id",
+              "name"
+            ]
+          }
+        },
+        "codeDump.notebooklmEnterprise": {
+          "type": "object",
+          "default": {
+            "enabled": false,
+            "projectNumber": "",
+            "location": "global",
+            "endpointLocation": "us-",
+            "notebookId": "",
+            "accessToken": ""
+          },
+          "description": "NotebookLM Enterprise upload settings (requires Enterprise access token).",
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "description": "Enable NotebookLM Enterprise uploads."
+            },
+            "projectNumber": {
+              "type": "string",
+              "description": "Google Cloud project number."
+            },
+            "location": {
+              "type": "string",
+              "description": "NotebookLM location (e.g. global, us, eu)."
+            },
+            "endpointLocation": {
+              "type": "string",
+              "description": "Endpoint location prefix (e.g. us-, eu-, global-)."
+            },
+            "notebookId": {
+              "type": "string",
+              "description": "NotebookLM notebook ID."
+            },
+            "accessToken": {
+              "type": "string",
+              "description": "OAuth access token for NotebookLM Enterprise."
             }
           }
         },
@@ -326,6 +476,10 @@
     "vsce": "^2.15.0"
   },
   "dependencies": {
-    "ignore": "^5.3.2"
+    "pdf-lib": "^1.17.1",
+    "ignore": "^5.3.2",
+    "tslib": "^2.8.1",
+    "@pdf-lib/standard-fonts": "^1.0.0",
+    "pako": "^2.1.0"
   }
 }
