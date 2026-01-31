@@ -39,6 +39,7 @@ const vscode = __importStar(require("vscode"));
 const path = __importStar(require("path"));
 const serviceContainer_1 = require("./serviceContainer");
 const webview_1 = require("./webview");
+const profileManagerWebview_1 = require("./profileManagerWebview");
 const exportWorkflow_1 = require("./exportWorkflow");
 function activate(context) {
     const services = serviceContainer_1.ServiceContainerFactory.create();
@@ -204,7 +205,15 @@ function activate(context) {
         }
         await vscode.commands.executeCommand("extension.exportCodeToText", vscode.Uri.file(folderUri));
     });
+    const profileDisposable = vscode.commands.registerCommand("extension.manageProfiles", async () => {
+        serviceContainer_1.ServiceContainerFactory.refreshConfig();
+        await (0, profileManagerWebview_1.showProfileManagerWebview)(context, {
+            profiles: services.config.load().userProfiles || [],
+            templates: services.template.getTemplateOptions()
+        });
+    });
     context.subscriptions.push(cliDisposable);
+    context.subscriptions.push(profileDisposable);
 }
 async function showFilePreview(services, folderUri, files) {
     // Calculate stats for preview

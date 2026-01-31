@@ -42,6 +42,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added a `showNotifications` setting to toggle VS Code toast notifications (default off).
 - Added a `logVerbose` setting to emit per-operation logs in the webview log (default off).
 - Improved export webview UX with summary, extension search, recent paths, and log filtering.
+- Added Profile Manager webview (command and button) to edit codeDump.userProfiles without manual JSON.
 
 ## [1.4.6] - 2026-01-29
 

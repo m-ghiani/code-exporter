@@ -14,7 +14,8 @@
     "url": "https://github.com/m-ghiani/code-exporter.git"
   },
   "activationEvents": [
-    "onCommand:extension.exportCodeToText"
+    "onCommand:extension.exportCodeToText",
+    "onCommand:extension.manageProfiles"
   ],
   "main": "./dist/extension.js",
   "contributes": {
@@ -27,6 +28,10 @@
       {
         "command": "extension.exportCodeCLI",
         "title": "Code Dump: Export Current Workspace"
+      },
+      {
+        "command": "extension.manageProfiles",
+        "title": "Code Dump: Manage Profiles"
       }
     ],
     "keybindings": [
@@ -49,6 +54,9 @@
         {
           "command": "extension.exportCodeCLI",
           "when": "workspaceFolderCount > 0"
+        },
+        {
+          "command": "extension.manageProfiles"
         }
       ]
     },

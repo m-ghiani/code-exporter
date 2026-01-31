@@ -1,4 +1,5 @@
 import * as vscode from "vscode";
+import { showProfileManagerWebview } from "./profileManagerWebview";
 
 export interface TemplateOption {
   key: string;
@@ -126,6 +127,17 @@ class WebviewPanelManager {
             this.panel.webview.postMessage({ type: "copiedPath" });
             return;
           }
+          case "openProfileManager": {
+            const updated = await showProfileManagerWebview(this.context, {
+              profiles: this.initData.profiles,
+              templates: this.initData.templates
+            });
+            if (updated) {
+              this.initData.profiles = updated;
+              this.panel.webview.postMessage({ type: "profilesUpdated", profiles: updated });
+            }
+            return;
+          }
           case "submit": {
             const selectedExtensions = Array.isArray(message.selectedExtensions)
               ? message.selectedExtensions.filter((e: unknown) => typeof e === "string")
@@ -217,7 +229,7 @@ function buildWebviewHtml(
   initData: WebviewInitData,
   nonce: string
 ): string {
-  const data = encodeURIComponent(JSON.stringify(initData));
+  const data = JSON.stringify(initData).replace(/</g, "\\u003c");
   const mediaRoot = vscode.Uri.joinPath(extensionUri, "media");
   const styleUri = webview.asWebviewUri(vscode.Uri.joinPath(mediaRoot, "style.css"));
   const scriptUri = webview.asWebviewUri(vscode.Uri.joinPath(mediaRoot, "main.js"));
@@ -231,7 +243,10 @@ function buildWebviewHtml(
   <title>Code Dump Export</title>
   <link rel="stylesheet" href="${styleUri}">
 </head>
-<body data-init="${data}">
+<body>
+  <script nonce="${nonce}">
+    window.__INIT__ = ${data};
+  </script>
   <h1>Code Dump Export</h1>
 
   <div class="section summary" id="summaryText"></div>
@@ -255,7 +270,10 @@ function buildWebviewHtml(
       <div class="row gap-16 mt-8">
         <div class="field-block">
           <label>Profile</label>
-          <select id="profileSelect"></select>
+          <div class="row">
+            <select id="profileSelect"></select>
+            <button id="manageProfiles" class="secondary">Manage</button>
+          </div>
           <div class="muted mt-4" id="profileHint"></div>
         </div>
         <div class="field-block">

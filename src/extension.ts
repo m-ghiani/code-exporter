@@ -3,6 +3,7 @@ import * as path from "path";
 import { ServiceContainerFactory } from "./serviceContainer";
 import { ExportPreset } from "./types";
 import { showExportWebview } from "./webview";
+import { showProfileManagerWebview } from "./profileManagerWebview";
 import {
   buildFileSelectionSummary,
   isNotebooklmUploadAvailable,
@@ -205,16 +206,25 @@ export function activate(context: vscode.ExtensionContext) {
   // CLI command
   const cliDisposable = vscode.commands.registerCommand("extension.exportCodeCLI", async () => {
     const folderUri = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
-      if (!folderUri) {
-        if (services.config.load().showNotifications) {
-          vscode.window.showErrorMessage("No workspace folder found.");
-        }
-        return;
+    if (!folderUri) {
+      if (services.config.load().showNotifications) {
+        vscode.window.showErrorMessage("No workspace folder found.");
       }
+      return;
+    }
     await vscode.commands.executeCommand("extension.exportCodeToText", vscode.Uri.file(folderUri));
   });
 
+  const profileDisposable = vscode.commands.registerCommand("extension.manageProfiles", async () => {
+    ServiceContainerFactory.refreshConfig();
+    await showProfileManagerWebview(context, {
+      profiles: services.config.load().userProfiles || [],
+      templates: services.template.getTemplateOptions()
+    });
+  });
+
   context.subscriptions.push(cliDisposable);
+  context.subscriptions.push(profileDisposable);
 }
 
 interface UserSelections {

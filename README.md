@@ -1,6 +1,6 @@
 # Code Dump to TXT/MD
 
-Export your workspace into a single `.txt`, `.md`, or `.json` file for AI tools, documentation, or archiving.
+Export your workspace into a single `.txt`, `.md`, `.json`, or `.pdf` file for AI tools, documentation, or archiving.
 
 ![Code Dump logo](logo.png)
 
@@ -24,6 +24,57 @@ Export your workspace into a single `.txt`, `.md`, or `.json` file for AI tools,
 1) Press `Ctrl+Shift+P` (`Cmd+Shift+P` on macOS).
 2) Run **Code Dump: Export Current Workspace**.
 3) Follow the prompts.
+
+---
+
+## Guida completa all’utilizzo
+
+### Installazione
+1) Apri VS Code.
+2) Vai nella sezione **Extensions**.
+3) Cerca **Code Dump to TXT/MD** e installa l’estensione.
+
+### Comandi disponibili
+- **Export Code to TXT/MD**: export classico con selezione estensioni/format.
+- **Code Dump: Export Current Workspace**: export rapido dell’intero workspace.
+- **Code Dump: Manage Profiles**: gestione profili (crea, modifica, elimina).
+
+### Webview di export (passo‑passo)
+1) **File extensions**: seleziona le estensioni da esportare.
+   - Usa la ricerca per filtrare.
+   - Attiva **Selected only** per mostrare solo quelle spuntate.
+2) **Profile**: applica un profilo salvato. Il pulsante **Manage** apre il Profile Manager.
+3) **Preset**:
+   - **Standard**: export normale.
+   - **AI Export Pack**: format JSON e template ai-ready forzati.
+4) **Template**: definisce la struttura dell’output.
+5) **Output format**: `.md`, `.txt`, `.json`, `.pdf`.
+6) **Opzioni**:
+   - Exclude empty files
+   - Preview files before export
+   - Open file after export
+7) **Output path**:
+   - **Choose…** per selezionare la destinazione.
+   - **Recent paths** per riutilizzare gli ultimi percorsi.
+   - **Copy** per copiare il path.
+8) **Log**:
+   - Sempre visibile.
+   - Selettore **Info/Verbose** per filtrare i messaggi.
+
+### Profile Manager
+- Apri **Code Dump: Manage Profiles** o usa **Manage** nella webview.
+- Ogni profilo può salvare:
+  - estensioni
+  - template
+  - formato
+  - preset
+  - flag di preview/empty/privacy
+- Salvataggio diretto in `codeDump.userProfiles`.
+
+### Log e notifiche
+- Il log nella webview è sempre disponibile.
+- `codeDump.logVerbose` abilita log dettagliati per‑file e per‑step.
+- `codeDump.showNotifications` abilita/disabilita i toast di VS Code.
 
 ---
 
@@ -182,6 +233,7 @@ Example:
 ## User Profiles
 
 Create personalized presets and switch them in the export webview.
+Puoi crearli/modificarli da **Code Dump: Manage Profiles**.
 
 Example:
 ```json
@@ -214,12 +266,24 @@ Add these to your `settings.json`:
   "codeDump.outputFormat": ".md",
   "codeDump.openAfterExport": true,
   "codeDump.copyToClipboard": false,
+  "codeDump.showNotifications": false,
+  "codeDump.logVerbose": false,
   "codeDump.compactMode": false,
   "codeDump.dryRun": false,
   "codeDump.skipEmptyFiles": "ask",
   "codeDump.showTokenEstimate": true,
   "codeDump.includeMetadata": false,
   "codeDump.includeDependencyGraph": true,
+  "codeDump.aiContextOptimizer": {
+    "enabled": false,
+    "maxTokenBudget": 100000,
+    "removeComments": true,
+    "removeDocstrings": true,
+    "minifyWhitespace": true,
+    "truncateLargeFiles": true,
+    "maxLinesPerFile": 500,
+    "prioritizeRecentFiles": true
+  },
   "codeDump.privacyMode": {
     "enabled": false,
     "maskEmails": true,
@@ -268,6 +332,28 @@ Log lines are timestamped for quick tracing.
 - Set `codeDump.showNotifications` to true if you want VS Code toast notifications (default is off; use the webview log instead).
 - Set `codeDump.logVerbose` to true for per-file and per-step logging in the webview log (default is off).
 - The export webview now includes a quick summary, extension search/filtering, recent paths, and a log level selector.
+- Profiles can be managed via **Code Dump: Manage Profiles** or the **Manage** button in the export webview.
+
+---
+
+## Troubleshooting
+
+- **Export vuoto**: controlla estensioni selezionate, `.gitignore`/`.codedumpignore`, o “Exclude empty files”.
+- **Log troppo rumoroso**: disattiva `codeDump.logVerbose` o imposta il filtro su **Info**.
+- **Upload NotebookLM fallisce**: verifica token, permessi e notebook ID.
+
+---
+
+## FAQ
+
+**Dove vengono salvati i profili?**
+Nel setting `codeDump.userProfiles`.
+
+**Come riduco la dimensione dell’export?**
+Attiva AI Context Optimizer e/o Compact Mode.
+
+**Posso evitare le notifiche?**
+Sì, lascia `codeDump.showNotifications` su `false`.
 
 ---
 

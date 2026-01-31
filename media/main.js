@@ -1,7 +1,6 @@
 (() => {
   const vscode = acquireVsCodeApi();
-  const initDataRaw = document.body.dataset.init || "";
-  const initData = initDataRaw ? JSON.parse(decodeURIComponent(initDataRaw)) : {};
+  const initData = window.__INIT__ || {};
 
   const elements = {
     extensionsList: document.getElementById("extensionsList"),
@@ -31,6 +30,7 @@
     recentPaths: document.getElementById("recentPaths"),
     templateLockBadge: document.getElementById("templateLockBadge"),
     formatLockBadge: document.getElementById("formatLockBadge"),
+    manageProfiles: document.getElementById("manageProfiles"),
     selectAllBtn: document.getElementById("selectAll"),
     clearAllBtn: document.getElementById("clearAll"),
     copyPathBtn: document.getElementById("copyPath"),
@@ -329,6 +329,10 @@
     applyProfile(elements.profileSelect.value);
   });
 
+  elements.manageProfiles.addEventListener("click", () => {
+    vscode.postMessage({ type: "openProfileManager" });
+  });
+
   elements.recentPaths.addEventListener("change", () => {
     if (!elements.recentPaths.value) return;
     state.outputPathCustom = true;
@@ -352,6 +356,15 @@
     }
     if (message.type === "appendLog" && typeof message.message === "string") {
       appendLog(message.message);
+    }
+    if (message.type === "profilesUpdated" && Array.isArray(message.profiles)) {
+      initData.profiles = message.profiles;
+      buildProfiles();
+      if (!message.profiles.some((profile) => profile.id === elements.profileSelect.value)) {
+        elements.profileSelect.value = "default";
+      }
+      applyProfile(elements.profileSelect.value);
+      updateSummary();
     }
     if (message.type === "setExporting") {
       setExportingState(Boolean(message.exporting));

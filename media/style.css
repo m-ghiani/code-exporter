@@ -199,3 +199,38 @@ button.secondary {
   gap: 8px;
   align-items: center;
 }
+
+.profile-manager {
+  display: grid;
+  grid-template-columns: 220px 1fr;
+  gap: 16px;
+}
+
+.profile-list ul {
+  list-style: none;
+  padding: 0;
+  margin: 8px 0 0;
+  border: 1px solid var(--vscode-panel-border);
+  border-radius: 6px;
+  max-height: 280px;
+  overflow: auto;
+}
+
+.profile-list li {
+  padding: 8px 10px;
+  cursor: pointer;
+  border-bottom: 1px solid var(--vscode-panel-border);
+}
+
+.profile-list li:last-child {
+  border-bottom: none;
+}
+
+.profile-list li.active {
+  background: var(--vscode-list-activeSelectionBackground);
+  color: var(--vscode-list-activeSelectionForeground);
+}
+
+.profile-editor input[type="text"] {
+  width: 100%;
+}
